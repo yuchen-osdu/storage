@@ -44,7 +44,6 @@ data:
 conf:
   appName: "storage"
   keycloakSecretName: "storage-keycloak-secret"
-  minioSecretName: "storage-minio-secret"
   s3SecretName: "storage-seaweedfs-secret"
   postgresSecretName: "storage-postgres-secret"
   rabbitmqSecretName: "rabbitmq-secret"
