@@ -76,7 +76,7 @@ First you need to set variables in **values.yaml** file using any code editor. S
 |------|-------------|------|---------|---------|
 **conf.appName** | Service name | string | `storage` | yes
 **conf.keycloakSecretName** | secret for keycloak | string | `storage-keycloak-secret` | yes
-**conf.minioSecretName** | secret for minio | string | `storage-minio-secret` | yes
+**conf.s3SecretName** | secret for SeaweedFS/S3 storage (prefixed with `global.dataPartitionId`) | string | `storage-seaweedfs-secret` | yes
 **conf.postgresSecretName** | secret for postgres | string | `storage-postgres-secret` | yes
 **conf.rabbitmqSecretName** | secret for rabbitmq | string | `rabbitmq-secret` | yes
 **conf.storageRedisSecretName** | secret for redis that contains redis password with REDIS_PASSWORD key | string | `storage-redis-secret` | yes

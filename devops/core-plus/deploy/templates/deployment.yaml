@@ -44,7 +44,7 @@ spec:
         - secretRef:
             name: {{ .Values.conf.keycloakSecretName | quote }}
         - secretRef:
-            name: {{ .Values.conf.minioSecretName | quote }}
+            name: {{ printf "%s-%s" .Values.global.dataPartitionId .Values.conf.s3SecretName | quote }}
         - secretRef:
             name: {{ .Values.conf.postgresSecretName | quote }}
         - secretRef:

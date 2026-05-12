@@ -9,7 +9,6 @@ entire metadata life-cycle such as ingestion (persistence), modification, deleti
 * [Settings and Configuration](#Settings-and-Configuration)
 * [Run service](#Run-service)
 * [Testing](#Testing)
-* [Deployment](#Deployment)
 * [Tutorial](#Tutorial)
 * [Entitlements groups](#Entitlements-groups)
 * [Licence](#License)
@@ -33,9 +32,9 @@ For more information about mappers:
 
 In the current version, the mappers are equipped with several drivers to the stores and the message broker:
 
-- OSM (mapper for KV-data): Google Datastore; Postgres
-- OBM (mapper to Blob stores): Google Cloud Storage (GCS); MinIO
-- OQM (mapper to message brokers): Google PubSub; RabbitMQ
+- OSM (mapper for KV-data): Postgres
+- OBM (mapper to Blob stores): Seaweed FS
+- OQM (mapper to message brokers): RabbitMQ
 
 ## Settings and Configuration
 
@@ -45,14 +44,9 @@ In the current version, the mappers are equipped with several drivers to the sto
    - JDK 17
    - Lombok 1.28 or later
    - Maven
-2. For Google Cloud only
-   - GCloud SDK with java (latest version)
 
 ### Baremetal Service Configuration:
 [Baremetal service configuration ](docs/baremetal/README.md)
-### Google Cloud Service Configuration:
-[Google Cloud service configuration ](docs/gc/README.md)
-
 ## Run service
 
 ### Run Locally
@@ -94,24 +88,6 @@ within `~/.mvn/community-maven.settings.xml`:
 </settings>
 ```
 
-* Update the Google cloud SDK to the latest version:
-
-```bash
-gcloud components update
-```
-
-* Set Google Project Id:
-
-```bash
-gcloud config set project <YOUR-PROJECT-ID>
-```
-
-* Perform a basic authentication in the selected project:
-
-```bash
-gcloud auth application-default login
-```
-
 * Navigate to storage service's root folder and run:
 
 ```bash
@@ -129,8 +105,26 @@ mvn clean install -DskipTests
 After configuring your environment as specified above, you can follow these steps to build and run the application.
 These steps should be invoked from the *repository root.*
 
+- Drivers should be downloaded.
 ```bash
-cd provider/storage-gc/ && mvn spring-boot:run
+    - mvn dependency:copy -DrepoUrl=$OSM_PACKAGE_REGISTRY_URL -Dartifact="org.opengroup.osdu:os-osm-postgres:$OSM_VERSION:jar:plugin" -Dtransitive=false -DoutputDirectory="./tmp"
+    - mvn dependency:copy -DrepoUrl=$OBM_PACKAGE_REGISTRY_URL -Dartifact="org.opengroup.osdu:os-obm-s3:$OBM_VERSION:jar:plugin" -Dtransitive=false -DoutputDirectory="./tmp"
+    - mvn dependency:copy -DrepoUrl=$OQM_PACKAGE_REGISRTY_URL -Dartifact="org.opengroup.osdu:os-oqm-rabbitmq:$OQM_VERSION:jar:plugin" -Dtransitive=false -DoutputDirectory="./tmp"
+
+```
+After configuring your environment as specified above, you can follow these steps to build and run the application. These steps should be invoked from the *repository root.*
+
+```bash
+# Run the web service on container startup.
+cd storage-core-plus/target 
+java $JAVA_TOOL_OPTIONS \
+         -Djava.security.egd=file:/dev/./urandom \
+         -Dserver.port=${PORT} \
+         -Dlog4j.formatMsgNoLookups=true \
+         -Dloader.path=plugins/ \
+         -Dloader.debug=true \
+         -Dloader.main=org.opengroup.osdu.storage.provider.gcp.StorageCorePlusApplication \
+         -jar /app/storage-${PROVIDER_NAME}.jar
 ```
 
 ## Testing
@@ -141,19 +135,6 @@ This section describes how to run cloud OSDU E2E tests.
 
 ### Baremetal test configuration:
 [Baremetal service configuration ](docs/baremetal/README.md)
-### Google Cloud test configuration:
-[Google Cloud service configuration ](docs/gc/README.md)
-
-
-## Deployment
-
-Storage Service is compatible with App Engine Flexible Environment and Cloud Run.
-
-* To deploy into Cloud run, please, use this documentation:
-  https://cloud.google.com/run/docs/quickstarts/build-and-deploy
-
-* To deploy into App Engine, please, use this documentation:
-  https://cloud.google.com/appengine/docs/flexible/java/quickstart
 
 ## Tutorial
 
@@ -168,8 +149,6 @@ Storage service account should have entitlements groups listed below:
 - users
 
 ## License
-
-Copyright © Google LLC
 
 Copyright © EPAM Systems
 

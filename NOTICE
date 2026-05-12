@@ -119,7 +119,7 @@ The following software have components provided under the terms of this license:
 - Google HTTP Client Library for Java (from https://github.com/googleapis/google-http-java-client, https://repo1.maven.org/maven2/com/google/http-client/google-http-client)
 - Google OAuth Client Library for Java (from https://github.com/googleapis/google-oauth-java-client, https://repo1.maven.org/maven2/com/google/oauth-client/google-oauth-client)
 - Gson (from http://code.google.com/p/google-gson/, https://github.com/google/gson, https://repo1.maven.org/maven2/com/google/code/gson/gson)
-- Guava InternalFutureFailureAccess and InternalFutures (from https://repo1.maven.org/maven2/com/google/guava/failureaccess)
+- Guava InternalFutureFailureAccess and InternalFutures (from https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/failureaccess)
 - Guava ListenableFuture only (from https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/listenablefuture)
 - Guava: Google Core Libraries for Java (from http://code.google.com/p/guava-libraries, https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/guava)
 - HK2 Implementation Utilities (from https://github.com/eclipse-ee4j/glassfish-hk2)
@@ -406,7 +406,7 @@ The following software have components provided under the terms of this license:
 
 - Apache Log4j Core (from https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core)
 - HK2 Implementation Utilities (from https://github.com/eclipse-ee4j/glassfish-hk2)
-- HK2 OSGi resource locator (from https://repo1.maven.org/maven2/org/glassfish/hk2/osgi-resource-locator)
+- HK2 OSGi resource locator (from https://projects.eclipse.org/projects/ee4j, https://repo1.maven.org/maven2/org/glassfish/hk2/osgi-resource-locator)
 - Java Architecture for XML Binding (from http://jaxb.java.net/, https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api)
 - Streaming API for XML (from https://repo1.maven.org/maven2/javax/xml/stream/stax-api)
 - aopalliance-repackaged (from https://github.com/eclipse-ee4j/glassfish-hk2, https://repo1.maven.org/maven2/org/glassfish/hk2/external/aopalliance-repackaged)
@@ -484,7 +484,7 @@ GPL-2.0-only
 ========================================================================
 The following software have components provided under the terms of this license:
 
-- HK2 OSGi resource locator (from https://repo1.maven.org/maven2/org/glassfish/hk2/osgi-resource-locator)
+- HK2 OSGi resource locator (from https://projects.eclipse.org/projects/ee4j, https://repo1.maven.org/maven2/org/glassfish/hk2/osgi-resource-locator)
 - tomcat-embed-core (from http://tomcat.apache.org/)
 
 ========================================================================
@@ -494,7 +494,7 @@ The following software have components provided under the terms of this license:
 
 - Angus Activation Registries (from https://repo1.maven.org/maven2/org/eclipse/angus/angus-activation)
 - HK2 Implementation Utilities (from https://github.com/eclipse-ee4j/glassfish-hk2)
-- HK2 OSGi resource locator (from https://repo1.maven.org/maven2/org/glassfish/hk2/osgi-resource-locator)
+- HK2 OSGi resource locator (from https://projects.eclipse.org/projects/ee4j, https://repo1.maven.org/maven2/org/glassfish/hk2/osgi-resource-locator)
 - Jakarta Activation API (from https://github.com/eclipse-ee4j/jaf, https://github.com/jakartaee/jaf-api, https://repo1.maven.org/maven2/jakarta/activation/jakarta.activation-api)
 - Jakarta Annotations API (from https://projects.eclipse.org/projects/ee4j.ca)
 - Jakarta Dependency Injection (from https://github.com/eclipse-ee4j/injection-api)
