@@ -236,7 +236,9 @@ public class DpsConversionService {
             for (JsonElement item : metaArray) {
                 JsonObject metaItem = (JsonObject) item;
                 JsonElement unitOfMeasureIDElement = metaItem.get(UNIT_OF_MEASURE_ID);
-                if (unitOfMeasureIDElement == null || unitOfMeasureIDElement.getAsString().equals("")) {
+                if (unitOfMeasureIDElement == null
+                        || unitOfMeasureIDElement.isJsonNull()
+                        || unitOfMeasureIDElement.getAsString().isEmpty()) {
                     return;
                 }
                 String unitOfMeasureID = unitOfMeasureIDElement.getAsString().replaceAll(":$", "");

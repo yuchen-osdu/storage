@@ -33,8 +33,7 @@ import org.opengroup.osdu.core.common.model.storage.ConversionStatus;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -80,6 +79,8 @@ public class ConversionServiceTest {
     private static final String ANY_CRS_MULTI_LINE_STRING_CONVERTED_RECORD = "{\"id\":\"geo-json-multi-line-string-test\",\"kind\":\"geo-json-multi-line-string:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"features\":[{\"geometry\":{\"coordinates\":[[[501000.0,7001000.0],[502000.0,7002000.0]]],\"bbox\":null,\"type\":\"AnyCrsMultiLineString\"},\"bbox\":null,\"properties\":{},\"type\":\"AnyCrsFeature\"}],\"bbox\":null,\"properties\":{},\"persistableReferenceCrs\":\"reference\",\"persistableReferenceUnitZ\":\"reference\",\"type\":\"AnyCrsFeatureCollection\"},\"Wgs84Coordinates\":{\"type\":\"FeatureCollection\",\"bbox\":null,\"features\":[{\"type\":\"Feature\",\"bbox\":null,\"geometry\":{\"type\":\"MultiLineString\",\"bbox\":null,\"coordinates\":[[[9.018268130018686,63.136450807807265],[9.0381148358597,63.145421923557194]]]},\"properties\":{}}],\"properties\":{},\"persistableReferenceCrs\":null,\"persistableReferenceUnitZ\":\"reference\"},\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0}}}";
     private static final String ANY_CRS_GEOMETRY_COLLECTION_RECORD = "{\"id\":\"geo-json-geometry-collection-test\",\"kind\":\"geo-json-geometry-collection:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"features\":[{\"geometry\":{\"type\":\"AnyCrsGeometryCollection\",\"bbox\":null,\"geometries\":[{\"type\":\"Point\",\"bbox\":null,\"coordinates\":[500000.0,7000000.0]},{\"type\":\"LineString\",\"bbox\":null,\"coordinates\":[[501000.0,7001000.0],[502000.0,7002000.0]]}]},\"bbox\":null,\"properties\":{},\"type\":\"AnyCrsFeature\"}],\"bbox\":null,\"properties\":{},\"persistableReferenceCrs\":\"reference\",\"persistableReferenceUnitZ\":\"reference\",\"type\":\"AnyCrsFeatureCollection\"},\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0}}}";
     private static final String ANY_CRS_GEOMETRY_COLLECTION_CONVERTED_RECORD = "{\"id\":\"geo-json-geometry-collection-test\",\"kind\":\"geo-json-geometry-collection:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"features\":[{\"geometry\":{\"type\":\"AnyCrsGeometryCollection\",\"bbox\":null,\"geometries\":[{\"type\":\"Point\",\"bbox\":null,\"coordinates\":[500000.0,7000000.0]},{\"type\":\"LineString\",\"bbox\":null,\"coordinates\":[[501000.0,7001000.0],[502000.0,7002000.0]]}]},\"bbox\":null,\"properties\":{},\"type\":\"AnyCrsFeature\"}],\"bbox\":null,\"properties\":{},\"persistableReferenceCrs\":\"reference\",\"persistableReferenceUnitZ\":\"reference\",\"type\":\"AnyCrsFeatureCollection\"},\"Wgs84Coordinates\":{\"type\":\"FeatureCollection\",\"bbox\":null,\"features\":[{\"type\":\"Feature\",\"bbox\":null,\"geometry\":{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[8.998433675254244,63.1274769068748]},{\"type\":\"LineString\",\"coordinates\":[[9.018268130018686,63.136450807807265],[9.0381148358597,63.145421923557194]]}]},\"properties\":{}}],\"properties\":{},\"persistableReferenceCrs\":null,\"persistableReferenceUnitZ\":\"reference\"},\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0}}}";
+    private static final String RECORD_WITH_NULL_UNIT_OF_MEASURE_ID = "{\"id\":\"unit-test-null-uom\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"MD\":10.0},\"meta\":[{\"kind\":\"Unit\",\"name\":\"ft\",\"persistableReference\":\"\",\"propertyNames\":[\"MD\"],\"unitOfMeasureID\":null}]}";
+
     private static final String INVALID_COORDINATES_ANY_CRS_RECORD = "{\"id\":\"geo-json-multi-polygon-test\",\"kind\":\"geo-json-multi-polygon:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"features\":[{\"geometry\":{\"coordinates\":[[[[30,20],[45,40],[10,40],[30,20]]],[[15,5],[40,10],[10,20],[5,10],[15,5]]],\"bbox\":null,\"type\":\"AnyCrsMultiPolygon\"},\"bbox\":null,\"properties\":{},\"type\":\"AnyCrsFeature\"}],\"bbox\":null,\"properties\":{},\"persistableReferenceCrs\":\"reference\",\"persistableReferenceUnitZ\":\"reference\",\"type\":\"AnyCrsFeatureCollection\"},\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0}}}";
     private static final String ERRONEOUS_ANY_CRS_RECORD_1 = "{\"id\":\"geo-json-point-test\",\"kind\":\"geo-json-point:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"Type\":\"AnyCrsFeatureCollection\",\"CoordinateReferenceSystemID\":\"NAD27\",\"VerticalCoordinateReferenceSystemID\":null,\"PersistableReferenceCrs\":null,\"PersistableReferenceVerticalCrs\":null,\"PersistableReferenceUnitZ\":null,\"Features\":[{\"Type\":\"AnyCrsFeature\",\"Properties\":null,\"Geometry\":{\"Coordinates\":[30.8793048,-87.7801454],\"Type\":\"AnyCrsPoint\",\"Bbox\":null}}],\"Bbox\":null},\"Wgs84Coordinates\":null}}}";
 
@@ -644,5 +645,30 @@ public class ConversionServiceTest {
 
         assertEquals(1, result.getRecords().size());
         assertEquals(result.getRecords().get(0), this.jsonParser.parse(COMBINED_ANY_CRS_META_FOR_CONVERTED_RECORD));
+    }
+
+    @Test
+    public void should_returnRecordWithNoFrameOfReference_whenProvidedRecordWithNullUnitOfMeasureID() {
+        this.originalRecords.add(this.jsonParser.parse(RECORD_WITH_NULL_UNIT_OF_MEASURE_ID).getAsJsonObject());
+
+        List<JsonObject> convertedRecords = new ArrayList<>();
+        convertedRecords.add(this.jsonParser.parse(RECORD_WITH_NULL_UNIT_OF_MEASURE_ID).getAsJsonObject());
+        List<ConversionStatus> conversionStatuses = new ArrayList<>();
+        ConversionStatus conversionStatus = new ConversionStatus();
+        conversionStatus.setStatus(ConvertStatus.SUCCESS.toString());
+        conversionStatus.setId("unit-test-null-uom");
+        conversionStatus.setErrors(new ArrayList<>());
+        conversionStatuses.add(conversionStatus);
+        RecordsAndStatuses crsConversionResult = new RecordsAndStatuses();
+        crsConversionResult.setConversionStatuses(conversionStatuses);
+        crsConversionResult.setRecords(convertedRecords);
+
+        when(this.crsConversionService.doCrsConversion(any(), any())).thenReturn(crsConversionResult);
+
+        assertDoesNotThrow(() -> this.sut.doConversion(this.originalRecords));
+
+        RecordsAndStatuses result = this.sut.doConversion(this.originalRecords);
+        assertEquals(1, result.getRecords().size());
+        assertEquals(1, result.getConversionStatuses().size());
     }
 }
