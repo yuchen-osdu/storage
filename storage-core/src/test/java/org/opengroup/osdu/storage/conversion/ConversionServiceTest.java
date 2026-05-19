@@ -15,6 +15,8 @@
 package org.opengroup.osdu.storage.conversion;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -28,13 +30,20 @@ import org.opengroup.osdu.core.common.crs.CrsConversionServiceErrorMessages;
 import org.opengroup.osdu.core.common.logging.JaxRsDpsLog;
 import org.opengroup.osdu.core.common.model.crs.ConvertStatus;
 import org.opengroup.osdu.core.common.model.crs.RecordsAndStatuses;
+import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.storage.ConversionStatus;
+import org.opengroup.osdu.storage.service.QueryService;
+import org.opengroup.osdu.core.common.model.storage.Record;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opengroup.osdu.storage.conversion.CrsConversionServiceErrorMessages.UNEXPECTED_DATA_FORMAT_JSON_OBJECT;
@@ -47,6 +56,12 @@ public class ConversionServiceTest {
 
     @Mock
     private JaxRsDpsLog logger;
+
+    @Mock
+    private QueryService queryService;
+
+    @Mock
+    private ObjectMapper objectMapper;
 
     @InjectMocks
     private DpsConversionService sut;
@@ -63,6 +78,11 @@ public class ConversionServiceTest {
     private static final String CONVERTED_RECORD_1 = "{\"id\":\"unit-test-1\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"msg\":\"testing record 1\",\"X\":15788.036,\"Y\":9567.40,\"Z\":0},\"meta\":[{\"path\":\"\",\"kind\":\"CRS\",\"persistableReference\":\"reference\",\"propertyNames\":[\"X\",\"Y\",\"Z\"],\"name\":\"GCS_WGS_1984\"}]}";
     private static final String CONVERTED_RECORD_3 = "{\"id\":\"unit-test-3\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"msg\":\"testing record 1\",\"X\":15788.036,\"Y\":9567.40,\"Z\":0},\"meta\":[{\"path\":\"\",\"kind\":\"CRS\",\"persistableReference\":\"reference\",\"propertyNames\":[\"X\",\"Y\",\"Z\"],\"name\":\"GCS_WGS_1984\"}]}";
 
+    private static final String RECORD_WITH_VALID_UNIT_OF_MEASURE_ID = "{\"id\":\"unit-test-valid-uom\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"MD\":10.0},\"meta\":[{\"kind\":\"Unit\",\"name\":\"ft\",\"persistableReference\":\"\",\"propertyNames\":[\"MD\"],\"unitOfMeasureID\":\"osdu:reference-data--UnitOfMeasure:ft\"}]}";
+    private static final String RECORD_WITH_MIXED_UNIT_OF_MEASURE_IDS = "{\"id\":\"unit-test-mixed-uom\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"MD\":10.0,\"Elevation\":50.0},\"meta\":[{\"kind\":\"Unit\",\"name\":\"m\",\"persistableReference\":\"\",\"propertyNames\":[\"Elevation\"],\"unitOfMeasureID\":\"\"},{\"kind\":\"Unit\",\"name\":\"ft\",\"persistableReference\":\"\",\"propertyNames\":[\"MD\"],\"unitOfMeasureID\":\"osdu:reference-data--UnitOfMeasure:ft\"}]}";
+    private static final String RECORD_WITH_INVALID_UNIT_OF_MEASURE_ID = "{\"id\":\"unit-test-invalid-uom\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"MD\":10.0,\"Elevation\":50.0},\"meta\":[{\"kind\":\"Unit\",\"name\":\"ft\",\"persistableReference\":\"\",\"propertyNames\":[\"MD\"],\"unitOfMeasureID\":\"osdu:reference-data--UnitOfMeasure:invalid\"},{\"kind\":\"Unit\",\"name\":\"m\",\"persistableReference\":\"\",\"propertyNames\":[\"Elevation\"],\"unitOfMeasureID\":\"osdu:reference-data--UnitOfMeasure:ft\"}]}";
+    private static final String UOM_RECORD_BLOB = "{\"id\":\"osdu:reference-data--UnitOfMeasure:ft\",\"data\":{\"PersistableReference\":\"{\\\"abcd\\\":{\\\"a\\\":0.0,\\\"b\\\":0.3048,\\\"c\\\":1.0,\\\"d\\\":0.0},\\\"symbol\\\":\\\"ft\\\",\\\"baseMeasurement\\\":{\\\"ancestry\\\":\\\"L\\\",\\\"type\\\":\\\"UM\\\"},\\\"type\\\":\\\"UAD\\\"}\"}}";
+    private static final String RESOLVED_PERSISTABLE_REFERENCE = "{\"abcd\":{\"a\":0.0,\"b\":0.3048,\"c\":1.0,\"d\":0.0},\"symbol\":\"ft\",\"baseMeasurement\":{\"ancestry\":\"L\",\"type\":\"UM\"},\"type\":\"UAD\"}";
     private static final String GEO_JSON_RECORD = "{\"id\":\"geo-json-test-1\",\"kind\":\"unit:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"geo-json-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0,\"SpatialLocation\":{\"AsIngestedCoordinates1\":{}}}}";
     private static final String GEO_JSON_RECORD_1 = "{\"id\":\"geo-json-point-test\",\"kind\":\"geo-json-point:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"features\":[{\"geometry\":{\"coordinates\":[313405.9477893702,6544797.620047403,6.561679790026246],\"bbox\":null,\"type\":\"AnyCrsPoint\"},\"bbox\":null,\"properties\":{},\"type\":\"AnyCrsFeature\"}],\"bbox\":null,\"properties\":{},\"persistableReferenceCrs\":\"reference\",\"persistableReferenceUnitZ\":\"reference\",\"type\":\"CrsFeatureCollection\"},\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0}}}";
     private static final String ANY_CRS_POINT_RECORD = "{\"id\":\"geo-json-point-test\",\"kind\":\"geo-json-point:test:1.0.0\",\"acl\":{\"viewers\":[\"viewers@unittest.com\"],\"owners\":[\"owners@unittest.com\"]},\"legal\":{\"legaltags\":[\"unit-test-legal\"],\"otherRelevantDataCountries\":[\"AA\"]},\"data\":{\"SpatialLocation\":{\"AsIngestedCoordinates\":{\"features\":[{\"geometry\":{\"coordinates\":[313405.9477893702,6544797.620047403,6.561679790026246],\"bbox\":null,\"type\":\"AnyCrsPoint\"},\"bbox\":null,\"properties\":{},\"type\":\"AnyCrsFeature\"}],\"bbox\":null,\"properties\":{},\"persistableReferenceCrs\":\"reference\",\"persistableReferenceUnitZ\":\"reference\",\"type\":\"AnyCrsFeatureCollection\"},\"msg\":\"testing record 2\",\"X\":16.00,\"Y\":10.00,\"Z\":0}}}";
@@ -282,6 +302,110 @@ public class ConversionServiceTest {
         verify(this.logger).warning("Missing record after conversion: unit-test-3");
         assertTrue(result.getRecords().contains(this.jsonParser.parse(CONVERTED_RECORD_1).getAsJsonObject()));
         assertTrue(result.getRecords().contains(this.jsonParser.parse(RECORD_2).getAsJsonObject()));
+    }
+
+    @Test
+    public void should_resolvePersistableReferenceFromUomLookup_whenProvidedRecordWithValidUnitOfMeasureID() throws Exception {
+        this.originalRecords.add(JsonParser.parseString(RECORD_WITH_VALID_UNIT_OF_MEASURE_ID).getAsJsonObject());
+
+        Record uomRecord = new Record();
+        uomRecord.setData(Map.of("PersistableReference", RESOLVED_PERSISTABLE_REFERENCE));
+        when(this.queryService.getRecordInfo(any(), any(), any())).thenReturn(UOM_RECORD_BLOB);
+        when(this.objectMapper.readValue(UOM_RECORD_BLOB, Record.class)).thenReturn(uomRecord);
+
+        List<JsonObject> convertedRecords = new ArrayList<>();
+        convertedRecords.add(JsonParser.parseString(RECORD_WITH_VALID_UNIT_OF_MEASURE_ID).getAsJsonObject());
+        List<ConversionStatus> conversionStatuses = new ArrayList<>();
+        ConversionStatus conversionStatus = new ConversionStatus();
+        conversionStatus.setStatus(ConvertStatus.SUCCESS.toString());
+        conversionStatus.setId("unit-test-valid-uom");
+        conversionStatus.setErrors(new ArrayList<>());
+        conversionStatuses.add(conversionStatus);
+        RecordsAndStatuses crsConversionResult = new RecordsAndStatuses();
+        crsConversionResult.setConversionStatuses(conversionStatuses);
+        crsConversionResult.setRecords(convertedRecords);
+        when(this.crsConversionService.doCrsConversion(any(), any())).thenReturn(crsConversionResult);
+
+        this.sut.doConversion(this.originalRecords);
+
+        // verify persistableReference was resolved on the record passed to doCrsConversion
+        verify(this.crsConversionService).doCrsConversion(argThat(records ->
+                records.get(0).getAsJsonArray("meta")
+                        .get(0).getAsJsonObject()
+                        .get("persistableReference").getAsString()
+                        .equals(RESOLVED_PERSISTABLE_REFERENCE)
+        ), any());
+    }
+
+    @Test
+    public void should_resolveSecondMetaItem_whenFirstMetaItemHasEmptyUnitOfMeasureID() throws Exception {
+        this.originalRecords.add(JsonParser.parseString(RECORD_WITH_MIXED_UNIT_OF_MEASURE_IDS).getAsJsonObject());
+
+        Record uomRecord = new Record();
+        uomRecord.setData(Map.of("PersistableReference", RESOLVED_PERSISTABLE_REFERENCE));
+        when(this.queryService.getRecordInfo(any(), any(), any())).thenReturn(UOM_RECORD_BLOB);
+        when(this.objectMapper.readValue(UOM_RECORD_BLOB, Record.class)).thenReturn(uomRecord);
+
+        List<JsonObject> convertedRecords = new ArrayList<>();
+        convertedRecords.add(JsonParser.parseString(RECORD_WITH_MIXED_UNIT_OF_MEASURE_IDS).getAsJsonObject());
+        List<ConversionStatus> conversionStatuses = new ArrayList<>();
+        ConversionStatus conversionStatus = new ConversionStatus();
+        conversionStatus.setStatus(ConvertStatus.SUCCESS.toString());
+        conversionStatus.setId("unit-test-mixed-uom");
+        conversionStatus.setErrors(new ArrayList<>());
+        conversionStatuses.add(conversionStatus);
+        RecordsAndStatuses crsConversionResult = new RecordsAndStatuses();
+        crsConversionResult.setConversionStatuses(conversionStatuses);
+        crsConversionResult.setRecords(convertedRecords);
+        when(this.crsConversionService.doCrsConversion(any(), any())).thenReturn(crsConversionResult);
+
+        this.sut.doConversion(this.originalRecords);
+
+        // verify first meta item persistableReference is still empty (no unitOfMeasureID)
+        // and second meta item persistableReference is resolved
+        verify(this.crsConversionService).doCrsConversion(argThat(records -> {
+            JsonArray meta = records.get(0).getAsJsonArray("meta");
+            String firstPersistableReference = meta.get(0).getAsJsonObject().get("persistableReference").getAsString();
+            String secondPersistableReference = meta.get(1).getAsJsonObject().get("persistableReference").getAsString();
+            return firstPersistableReference.isEmpty() && secondPersistableReference.equals(RESOLVED_PERSISTABLE_REFERENCE);
+        }), any());
+    }
+
+    @Test
+    public void should_resolveSecondMetaItem_whenFirstMetaItemUomLookupFails() throws Exception {
+        this.originalRecords.add(JsonParser.parseString(RECORD_WITH_INVALID_UNIT_OF_MEASURE_ID).getAsJsonObject());
+
+        Record uomRecord = new Record();
+        uomRecord.setData(Map.of("PersistableReference", RESOLVED_PERSISTABLE_REFERENCE));
+        when(this.queryService.getRecordInfo(eq("osdu:reference-data--UnitOfMeasure:invalid"), any(), any()))
+                .thenThrow(new AppException(404, "Not found", "Record not found"));
+        when(this.queryService.getRecordInfo(eq("osdu:reference-data--UnitOfMeasure:ft"), any(), any()))
+                .thenReturn(UOM_RECORD_BLOB);
+        when(this.objectMapper.readValue(UOM_RECORD_BLOB, Record.class)).thenReturn(uomRecord);
+
+        List<JsonObject> convertedRecords = new ArrayList<>();
+        convertedRecords.add(JsonParser.parseString(RECORD_WITH_INVALID_UNIT_OF_MEASURE_ID).getAsJsonObject());
+        List<ConversionStatus> conversionStatuses = new ArrayList<>();
+        ConversionStatus conversionStatus = new ConversionStatus();
+        conversionStatus.setStatus(ConvertStatus.SUCCESS.toString());
+        conversionStatus.setId("unit-test-invalid-uom");
+        conversionStatus.setErrors(new ArrayList<>());
+        conversionStatuses.add(conversionStatus);
+        RecordsAndStatuses crsConversionResult = new RecordsAndStatuses();
+        crsConversionResult.setConversionStatuses(conversionStatuses);
+        crsConversionResult.setRecords(convertedRecords);
+        when(this.crsConversionService.doCrsConversion(any(), any())).thenReturn(crsConversionResult);
+
+        this.sut.doConversion(this.originalRecords);
+
+        // verify first meta item persistableReference is still empty (lookup failed)
+        // and second meta item persistableReference is resolved
+        verify(this.crsConversionService).doCrsConversion(argThat(records -> {
+            JsonArray meta = records.get(0).getAsJsonArray("meta");
+            String firstPersistableReference = meta.get(0).getAsJsonObject().get("persistableReference").getAsString();
+            String secondPersistableReference = meta.get(1).getAsJsonObject().get("persistableReference").getAsString();
+            return firstPersistableReference.isEmpty() && secondPersistableReference.equals(RESOLVED_PERSISTABLE_REFERENCE);
+        }), any());
     }
 
     @Test

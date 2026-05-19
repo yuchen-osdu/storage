@@ -40,7 +40,6 @@ import org.opengroup.osdu.core.common.cache.VmCache;
 import org.opengroup.osdu.storage.service.QueryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -102,11 +101,10 @@ public class DpsConversionService {
                 addOrUpdateRecordStatus(conversionResults, geoConvertedRecords);
             }
             if (!recordsWithMetaBlock.isEmpty()) {
-                List<ConversionRecord> metaConvertedRecords = new ArrayList<>();
-                crsConversionResult = this.crsConversionService.doCrsConversion(recordsWithMetaBlock, conversionStatuses);
-                metaConvertedRecords = this.getConversionRecords(crsConversionResult);
                 // update persistableReefrence value using unitOfMeasureID property
-                this.updatePersistableReference(metaConvertedRecords);
+                this.updatePersistableReference(recordsWithMetaBlock);
+                crsConversionResult = this.crsConversionService.doCrsConversion(recordsWithMetaBlock, conversionStatuses);
+                List<ConversionRecord> metaConvertedRecords = this.getConversionRecords(crsConversionResult);
                 this.unitConversionService.convertUnitsToSI(metaConvertedRecords);
                 this.datesConversionService.convertDatesToISO(metaConvertedRecords);
                 addOrUpdateRecordStatus(conversionResults, metaConvertedRecords);
@@ -226,12 +224,11 @@ public class DpsConversionService {
         return conversionRecords;
     }
 
-    private void updatePersistableReference(List<ConversionRecord> conversionRecords) {
-        for (ConversionRecord conversionRecord : conversionRecords) {
-            JsonObject recordObj = conversionRecord.getRecordJsonObject();
+    private void updatePersistableReference(List<JsonObject> conversionRecords) {
+        for (JsonObject recordObj : conversionRecords) {
             JsonArray metaArray = recordObj.getAsJsonArray(Constants.META);
             if (metaArray == null) {
-                return;
+                continue;
             }
             for (JsonElement item : metaArray) {
                 JsonObject metaItem = (JsonObject) item;
@@ -239,14 +236,14 @@ public class DpsConversionService {
                 if (unitOfMeasureIDElement == null
                         || unitOfMeasureIDElement.isJsonNull()
                         || unitOfMeasureIDElement.getAsString().isEmpty()) {
-                    return;
+                    continue;
                 }
                 String unitOfMeasureID = unitOfMeasureIDElement.getAsString().replaceAll(":$", "");
                 String persistableReference = this.getPersistableReferenceByUnitOfMeasureID(unitOfMeasureID);
-                if (persistableReference.equals("")) {
+                if (persistableReference.isEmpty()) {
                     this.logger.warning("Persistable reference was not obtained for record %s by unit of measure %s"
                             .formatted(recordObj.get(Constants.ID), unitOfMeasureID));
-                    return;
+                    continue;
                 }
                 // update persistableReference to corresponding to unitOfMeasureID
                 metaItem.addProperty(Constants.PERSISTABLE_REFERENCE, persistableReference);
