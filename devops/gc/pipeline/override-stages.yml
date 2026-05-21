@@ -10,10 +10,6 @@ variables:
   ENTITLEMENTS_URL: $ENTITLEMENTS_HOST
   OTEL_JAVAAGENT_ENABLED: "true"
 
-gc-dev2-test:
-  variables:
-    DATA_ROOT_TESTER: $GC_DEV2_DATA_ROOT_CLIENT_ID_FILE
-
 download_gc_plugins:
   image: maven:3.8.3-openjdk-17-slim
   stage: build
