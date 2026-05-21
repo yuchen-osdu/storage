@@ -8,6 +8,7 @@ global:
   logLevel: "ERROR"
   tier: ""
   autoscalingMode: "cpu"
+  otelJavaagentEnabled: "true"
 
 data:
   # configmaps
@@ -19,7 +20,6 @@ data:
   crsConverterHost: "http://crs-conversion"
   legalHost: "http://legal"
   opaEndpoint: "http://opa"
-  otelJavaagentEnabled: "true"
   otelExporterEndpoint: "http://opentelemetry-collector.opentelemetry.svc.cluster.local:4318"
   # deployments
   requestsCpu: "150m"
