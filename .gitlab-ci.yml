@@ -21,12 +21,6 @@ variables:
   AZURE_TEST_SUBDIR: testing/storage-test-azure
   SERVICE_JAVA_VERSION: "17"
 
-  IBM_BUILD_SUBDIR: provider/storage-ibm
-  IBM_INT_TEST_SUBDIR: testing/storage-test-ibm
-  IBM_TENANT_NAME: tenant1
-  IBM_HELM_CONFIG_PATH: devops/ibm/ibm-storage-config
-  IBM_HELM_DEPLOY_PATH: devops/ibm/ibm-storage-deploy
-
   CIMPL_OPENAPI_SPEC_PATH: docs/api/community/v2/openapi.yaml
   CIMPL_OPENAPI_YAML_ROUTE: /api/storage/v2/api-docs.yaml
 
@@ -53,9 +47,6 @@ include:
     file: "cloud-providers/aws-maven.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
-    file: "cloud-providers/ibm.yml"
-
-  - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/gc-global.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
@@ -73,9 +64,6 @@ include:
   - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/azure.yml"
 
-  - project: "osdu/platform/ci-cd-pipelines"
-    file: "cloud-providers/ibm.yml"
-
   - local: "devops/core-plus/pipeline/override-stages.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
@@ -86,9 +74,6 @@ include:
 
   - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/gc-one-pipeline.yml"
-
-  - project: "osdu/platform/ci-cd-pipelines"
-    file: "cloud-providers/ibm-one-pipeline.yml"
 
   - local: "devops/gc/pipeline/override-stages.yml"
 
