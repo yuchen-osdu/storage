@@ -17,42 +17,18 @@
 
 package org.opengroup.osdu.storage.api;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 
-public final class HealthCheckApiIntegrationTest extends TestBase {
-
-  @BeforeEach
-  @Override
-  public void setup() throws Exception {
-    this.testUtils = new TokenTestUtils();
-  }
-
-  @AfterEach
-  @Override
-  public void tearDown() throws Exception {
-    this.testUtils = null;
-  }
-
+public final class HealthCheckApiIntegrationTest extends BaseStorageAcceptanceTest {
   @Test
-  public void should_returnOk() throws Exception {
-    CloseableHttpResponse response =
-        TestUtils.send(
-            "liveness_check",
-            "GET",
-            HeaderUtils.getHeaders(TenantUtils.getTenantName(), null),
-            "",
-            "");
-    assertEquals(HttpStatus.SC_OK, response.getCode());
+  public void should_returnOk() {
+    HttpResponse<Void> response = storageClient.livenessCheck();
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
   }
 }

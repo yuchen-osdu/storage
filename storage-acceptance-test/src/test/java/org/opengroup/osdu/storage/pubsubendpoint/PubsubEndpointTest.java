@@ -14,149 +14,77 @@
 
 package org.opengroup.osdu.storage.pubsubendpoint;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class PubsubEndpointTest extends TestBase {
-	private static final long NOW = System.currentTimeMillis();
-	private static final long FIVE_SECOND_LATER = NOW + 5000L;
-	private static final String LEGAL_TAG_1 = LegalTagUtils.createRandomName();
-	private static final String LEGAL_TAG_2 = LEGAL_TAG_1 + "random2";
+public final class PubsubEndpointTest extends BaseStorageAcceptanceTest {
 
-	private static final String KIND = TenantUtils.getTenantName() + ":test:endtoend:1.1." + NOW;
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":endtoend:1.1." + NOW;
-	private static final String RECORD_ID_2 = TenantUtils.getTenantName() + ":endtoend:1.1."
-			+ FIVE_SECOND_LATER;
+  private static final long NOW = System.currentTimeMillis();
+  private static final long FIVE_SECOND_LATER = NOW + 5000L;
 
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+  private static String LEGAL_TAG_1;
+  private static String LEGAL_TAG_2;
+  private static String RECORD_ID;
 
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		PubsubEndpointTest.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    LEGAL_TAG_1 = getTenantId() + "-storage-" + NOW;
+    LEGAL_TAG_2 = LEGAL_TAG_1 + "random2";
+    String KIND = getTenantId() + ":test:endtoend:1.1." + NOW;
+    RECORD_ID = getTenantId() + ":endtoend:1.1." + NOW;
+    String RECORD_ID_2 = getTenantId() + ":endtoend:1.1." + FIVE_SECOND_LATER;
 
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		PubsubEndpointTest.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
+    createLegalTag(LEGAL_TAG_1);
+    StorageRecord[] record1 = RecordUtil.createDefaultRecords(RECORD_ID, KIND, LEGAL_TAG_1);
+    HttpResponse<CreateRecordsResponse> responseValid = storageClient.putRecords(record1);
+    assertEquals(HttpStatus.SC_CREATED, responseValid.statusCode());
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+    createLegalTag(LEGAL_TAG_2);
+    StorageRecord[] record2 = RecordUtil.createDefaultRecords(RECORD_ID_2, KIND, LEGAL_TAG_2);
+    HttpResponse<CreateRecordsResponse> responseValid2 = storageClient.putRecords(record2);
+    assertEquals(HttpStatus.SC_CREATED, responseValid2.statusCode());
+  }
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+  @Test
+  public void should_deleteIncompliantLegalTagAndInvalidateRecordsAndNotIngestAgain_whenIncompliantMessageSentToEndpoint()
+      throws Exception {
+    legalTagClient.delete(LEGAL_TAG_1);
+    // wait until cache of opa will be rebuild
+    Thread.sleep(100000);
 
-	public static void classSetup(String token) throws Exception {
-		LegalTagUtils.create(LEGAL_TAG_1, token);
-		String record1 = RecordUtil.createDefaultJsonRecord(RECORD_ID, KIND, LEGAL_TAG_1);
-		CloseableHttpResponse responseValid = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), record1, "");
-		assertEquals(HttpStatus.SC_CREATED, responseValid.getCode());
+    assertThrows(ClientException.class, () -> storageClient.getRecord(RECORD_ID));
 
-		LegalTagUtils.create(LEGAL_TAG_2, token);
-		String record2 = RecordUtil.createDefaultJsonRecord(RECORD_ID_2, KIND, LEGAL_TAG_2);
-		CloseableHttpResponse responseValid2 = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), record2, "");
-		assertEquals(HttpStatus.SC_CREATED, responseValid2.getCode());
-	}
+    long now = System.currentTimeMillis();
+    long later = now + 2000L;
+    String recordIdTemp1 = getTenantId() + ":endtoend:1.1." + now;
+    String kindTemp = getTenantId() + ":test:endtoend:1.1." + now;
+    StorageRecord[] recordTemp1 = RecordUtil.createDefaultRecords(recordIdTemp1, kindTemp, LEGAL_TAG_1);
+    String recordIdTemp2 = getTenantId() + ":endtoend:1.1." + later;
+    StorageRecord[] recordTemp2 = RecordUtil.createDefaultRecords(recordIdTemp2, kindTemp, LEGAL_TAG_2);
 
-	public static void classTearDown(String token) throws Exception {
-		TestUtils.send("records/" + RECORD_ID, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID_2, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.putRecords(recordTemp1));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Invalid legal tags", ex.getError().getReason());
 
-		LegalTagUtils.delete(LEGAL_TAG_1, token);
-		LegalTagUtils.delete(LEGAL_TAG_2, token);
-	}
+    HttpResponse<CreateRecordsResponse> responseValid3 =
+        storageClient.putRecords(recordTemp2);
+    assertEquals(HttpStatus.SC_CREATED, responseValid3.statusCode());
 
-	@Test
-	public void should_deleteIncompliantLegaltagAndInvalidateRecordsAndNotIngestAgain_whenIncompliantMessageSentToEndpoint()
-			throws Exception {
-		LegalTagUtils.delete(LEGAL_TAG_1, testUtils.getToken());
-		// wait until cache of opa will be rebuild
-		Thread.sleep(100000);
-
-		List<String> legalTagNames = new ArrayList<>();
-		legalTagNames.add(LEGAL_TAG_1);
-		legalTagNames.add(LEGAL_TAG_2);
-
-		CloseableHttpResponse responseRecordQuery =
-				TestUtils.send(
-						"records/" + RECORD_ID,
-						"GET",
-						HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-						"",
-						"");
-		assertEquals(HttpStatus.SC_NOT_FOUND, responseRecordQuery.getCode());
-
-		long now = System.currentTimeMillis();
-		long later = now + 2000L;
-		String recordIdTemp1 = TenantUtils.getTenantName() + ":endtoend:1.1." + now;
-		String kindTemp = TenantUtils.getTenantName() + ":test:endtoend:1.1." + now;
-		String recordTemp1 = RecordUtil.createDefaultJsonRecord(recordIdTemp1, kindTemp, LEGAL_TAG_1);
-		String recordIdTemp2 = TenantUtils.getTenantName() + ":endtoend:1.1." + later;
-		String recordTemp2 = RecordUtil.createDefaultJsonRecord(recordIdTemp2, kindTemp, LEGAL_TAG_2);
-
-		CloseableHttpResponse responseInvalid =
-				TestUtils.send(
-						"records",
-						"PUT",
-						HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-						recordTemp1,
-						"");
-		assertEquals(HttpStatus.SC_BAD_REQUEST, responseInvalid.getCode());
-		assertEquals(
-				"Invalid legal tags", this.getResponseReasonFromRecordIngestResponse(responseInvalid));
-		CloseableHttpResponse responseValid3 =
-				TestUtils.send(
-						"records",
-						"PUT",
-						HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-						recordTemp2,
-						"");
-		assertEquals(HttpStatus.SC_CREATED, responseValid3.getCode());
-		TestUtils.send(
-				"records/" + recordIdTemp2,
-				"DELETE",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-				"",
-				"");
-	}
-
-	protected String getResponseReasonFromRecordIngestResponse(CloseableHttpResponse response) {
-		JsonObject json = null;
-		try {
-			json = new JsonParser().parse(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		} catch (ParseException e) {
-			throw new RuntimeException(e);
-		}
-		return json.get("reason").getAsString();
-	}
+    storageClient.deleteRecord(recordIdTemp2);
+  }
 
 }

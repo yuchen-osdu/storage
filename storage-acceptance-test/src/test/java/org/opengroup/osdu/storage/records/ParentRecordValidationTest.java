@@ -14,92 +14,61 @@
 
 package org.opengroup.osdu.storage.records;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.opengroup.osdu.core.test.client.HttpResponse;
 
-import com.google.gson.JsonParser;
-import java.util.Arrays;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class ParentRecordValidationTest extends TestBase {
+public final class ParentRecordValidationTest extends BaseRecordsAcceptanceTest {
 
-    private static long NOW = System.currentTimeMillis();
-    private static String LEGAL_TAG = LegalTagUtils.createRandomName();
-    private static String KIND = TenantUtils.getFirstTenantName() + ":bulkupdate:test:1.1." + NOW;
-    private static String RECORD_ID = TenantUtils.getFirstTenantName() + ":test:1.1." + NOW;
-    private static String RECORD_ID_2 = TenantUtils.getFirstTenantName() + ":test:1.2." + NOW;
-    private static String RECORD_ID_3 = TenantUtils.getFirstTenantName() + ":test:1.3." + NOW;
+  private String LEGAL_TAG;
+  private String KIND;
+  private String RECORD_ID;
+  private String RECORD_ID_2;
+  private String RECORD_ID_3;
 
-    @BeforeEach
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        LegalTagUtils.create(LEGAL_TAG, testUtils.getToken());
-    }
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    LEGAL_TAG = getTenantId() + "-storage-" + now;
+    KIND = getTenantId() + ":bulkupdate:test:1.1." + now;
+    RECORD_ID = getTenantId() + ":test:1.1." + now;
+    RECORD_ID_2 = getTenantId() + ":test:1.2." + now;
+    RECORD_ID_3 = getTenantId() + ":test:1.3." + now;
+    createLegalTag(LEGAL_TAG);
+  }
 
-    @AfterEach
-    public void tearDown() throws Exception {
-        LegalTagUtils.delete(LEGAL_TAG, testUtils.getToken());
-        for (String record_id : Arrays.asList(RECORD_ID, RECORD_ID_2, RECORD_ID_3))
-        {
-            TestUtils.send(
-                "records/" + record_id,
-                "DELETE",
-                HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                "",
-                ""
-            );
-        }
-        this.testUtils = null;
-    }
+  @Test
+  public void shouldReturn200_whenRecordContainsValidAncestry() {
+    var createResponse = storageClient.putRecords(withTestAcl(RecordUtil.createDefaultRecords(RECORD_ID, KIND, LEGAL_TAG)));
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+    CreateRecordsResponse createResult = createResponse.body();
+    String parentIdWithVersion = createResult.recordIdVersions()[0];
 
-    @Test
-    public void shouldReturn200_whenRecordContainsValidAncestry() throws Exception {
-        CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                RecordUtil.createDefaultJsonRecord(RECORD_ID, KIND, LEGAL_TAG), "");
+    HttpResponse<CreateRecordsResponse> response2 = storageClient.putRecords(withTestAcl(
+        RecordUtil.createDefaultRecordsWithParentId(RECORD_ID_2, KIND, LEGAL_TAG,
+            parentIdWithVersion)));
+    assertEquals(HttpStatus.SC_CREATED, response2.statusCode());
+  }
 
-        String responseString = EntityUtils.toString(response.getEntity());
-        String parentIdWithVersion = JsonParser
-                .parseString(responseString)
-                .getAsJsonObject()
-                .get("recordIdVersions")
-                .getAsJsonArray()
-                .get(0).getAsString();
-
-        CloseableHttpResponse response2 = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                RecordUtil.createDefaultJsonRecordWithParentId(RECORD_ID_2, KIND, LEGAL_TAG, parentIdWithVersion), "");
-
-        assertEquals(HttpStatus.SC_CREATED, response.getCode());
-        assertEquals(HttpStatus.SC_CREATED, response2.getCode());
-    }
-
-    @Test
-    public void shouldReturn404_whenRecordAncestryNotExisted() throws Exception {
-
-        String parentIdWithVersion = "opendes:test:1.1.1000000000000:1000000000000000";
-        CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                RecordUtil.createDefaultJsonRecordWithParentId(RECORD_ID_3, KIND, LEGAL_TAG, parentIdWithVersion), "");
-
-
-        String expectedErrorMessage = "The record 'RecordIdWithVersion(recordId=opendes:test:1.1.1000000000000, recordVersion=1000000000000000)' was not found";
-        String actualErrorMessage = JsonParser
-            .parseString(EntityUtils.toString(response.getEntity()))
-            .getAsJsonObject()
-            .get("message")
-            .getAsString();
-
-        assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-        assertEquals(expectedErrorMessage, actualErrorMessage);
-    }
+  @Test
+  public void shouldReturn404_whenRecordAncestryNotExisted() {
+    String parentIdWithVersion = "opendes:test:1.1.1000000000000:1000000000000000";
+    String expectedErrorMessage = "The record 'RecordIdWithVersion(recordId=opendes:test:1.1.1000000000000, recordVersion=1000000000000000)' was not found";
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.putRecords(withTestAcl(
+            RecordUtil.createDefaultRecordsWithParentId(RECORD_ID_3, KIND, LEGAL_TAG,
+                parentIdWithVersion))));
+    assertEquals(HttpStatus.SC_NOT_FOUND, ex.getStatusCode());
+    assertEquals(expectedErrorMessage, ex.getError().getMessage());
+  }
 }
-

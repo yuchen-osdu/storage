@@ -14,180 +14,103 @@
 
 package org.opengroup.osdu.storage.query;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+
+import org.opengroup.osdu.core.test.client.model.storage.QueryRecordsRequest;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+import org.opengroup.osdu.core.test.client.model.storage.Records;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import java.util.Arrays;
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
+import org.opengroup.osdu.storage.records.BaseRecordsAcceptanceTest;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
+public final class PostQueryRecordsIntegrationTests extends BaseRecordsAcceptanceTest {
 
-public final class PostQueryRecordsIntegrationTests extends TestBase {
+  private static final long NOW = System.currentTimeMillis();
 
-	private static final long NOW = System.currentTimeMillis();
+  private static String RECORD_ID_PREFIX;
+  private static String RECORD_ID;
+  private static String KIND;
 
-	private static final String RECORD_ID_PREFIX = TenantUtils.getFirstTenantName() + ":query:";
-	private static final String RECORD_ID = RECORD_ID_PREFIX + NOW;
-	private static final String KIND = TenantUtils.getTenantName() + ":ds:query:1.0." + NOW;
-	private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
-	private static final DummyRecordsHelper RECORDS_HELPER = new DummyRecordsHelper();
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    RECORD_ID_PREFIX = getTenantId() + ":query:";
+    RECORD_ID = RECORD_ID_PREFIX + NOW;
+    KIND = getTenantId() + ":ds:query:1.0." + NOW;
+    String LEGAL_TAG = getTenantId() + "-storage-" + NOW;
 
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		PostQueryRecordsIntegrationTests.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
+    createLegalTag(LEGAL_TAG);
+    StorageRecord[] jsonInput = RecordUtil.createDefaultRecords(3, RECORD_ID, KIND, LEGAL_TAG);
 
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		PostQueryRecordsIntegrationTests.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
+    HttpResponse<CreateRecordsResponse> response = storageClient.putRecords(jsonInput);
+    HttpResponse<CreateRecordsResponse> modifyRecordsResponse = storageClient.putRecords(jsonInput);
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
+    assertEquals(HttpStatus.SC_CREATED, modifyRecordsResponse.statusCode());
+  }
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+  @Test
+  public void should_returnSingleRecordMatching_when_givenIdAndNoAttributes() {
+    var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.of(RECORD_ID + 0));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    Records responseObject = queryResponse.body();
+    assertEquals(1, responseObject.records().length);
+    assertEquals(0, responseObject.invalidRecords().length);
+    assertEquals(0, responseObject.retryRecords().length);
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+    assertEquals(getAcl(), responseObject.records()[0].acl().viewers()[0]);
+    assertEquals(RECORD_ID + 0, responseObject.records()[0].id());
+    assertEquals(KIND, responseObject.records()[0].kind());
+    assertTrue(responseObject.records()[0].createUser() != null && responseObject.records()[0].createTime() != null);
+    assertTrue(responseObject.records()[0].modifyUser() != null && responseObject.records()[0].modifyTime() != null);
+    assertTrue(responseObject.records()[0].version() != null && !responseObject.records()[0].version().isEmpty());
+    assertEquals(3, responseObject.records()[0].data().size());
+  }
 
-	public static void classSetup(String token) throws Exception {
-		LegalTagUtils.create(LEGAL_TAG, token);
-		String jsonInput = RecordUtil.createDefaultJsonRecords(3, RECORD_ID, KIND, LEGAL_TAG);
+  @Test
+  public void should_returnOnlyRequestedDataProperties_when_specificAttributesAreGiven() {
+    var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.withAttributes(new String[] {"data.count"}, RECORD_ID + 1));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    Records responseObject = queryResponse.body();
+    assertEquals(1, responseObject.records()[0].data().size());
+    assertEquals(123456789L, responseObject.records()[0].data().get("count"));
+  }
 
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), jsonInput, "");
-		CloseableHttpResponse modifyRecordsResponse = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), jsonInput, "");
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-		assertEquals(HttpStatus.SC_CREATED, modifyRecordsResponse.getCode());
-	}
+  @Test
+  public void should_returnMultipleRecordsMatchingGivenIds_when_noAttributesAreGiven() {
+    var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.of(RECORD_ID + 0, RECORD_ID + 1, RECORD_ID + 2));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    Records responseObject = queryResponse.body();
+    assertEquals(3, responseObject.records().length);
+    assertEquals(0, responseObject.invalidRecords().length);
+    assertEquals(0, responseObject.retryRecords().length);
 
-	public static void classTearDown(String token) throws Exception {
-		TestUtils.send("records/" + RECORD_ID + 0, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID + 1, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID + 2, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
+    String[] ids = ArrayUtils.addAll(new String[] {responseObject.records()[0].id()},
+        responseObject.records()[1].id(), responseObject.records()[2].id());
+    assertTrue(Arrays.asList(ids).contains(RECORD_ID + 0));
+    assertTrue(Arrays.asList(ids).contains(RECORD_ID + 1));
+    assertTrue(Arrays.asList(ids).contains(RECORD_ID + 2));
+  }
 
-		LegalTagUtils.delete(LEGAL_TAG, token);
-	}
+  @Test
+  public void should_returnInvalidRecord_when_nonExistingIDGiven() {
+    String notExistingId = RECORD_ID_PREFIX + "nonexisting:id";
+    var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.of(notExistingId));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    Records responseObject = queryResponse.body();
+    assertEquals(0, responseObject.records().length);
+    assertEquals(1, responseObject.invalidRecords().length);
+    assertEquals(notExistingId, responseObject.invalidRecords()[0]);
+    assertEquals(0, responseObject.retryRecords().length);
+  }
 
-	@Test
-	public void should_returnSingleRecordMatching_when_givenIdAndNoAttributes() throws Exception {
-		JsonArray attributes = new JsonArray();
-		JsonArray records = new JsonArray();
-		records.add(RECORD_ID + 0);
-
-		JsonObject body = new JsonObject();
-		body.add("records", records);
-		body.add("attributes", attributes);
-
-		CloseableHttpResponse response = TestUtils.send("query/records", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), body.toString(),
-				"");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		DummyRecordsHelper.RecordsMock responseObject = RECORDS_HELPER.getRecordsMockFromResponse(response);
-
-		assertEquals(1, responseObject.records.length);
-		assertEquals(0, responseObject.invalidRecords.length);
-		assertEquals(0, responseObject.retryRecords.length);
-
-		assertEquals(TestUtils.getAcl(), responseObject.records[0].acl.viewers[0]);
-		assertEquals(RECORD_ID + 0, responseObject.records[0].id);
-		assertEquals(KIND, responseObject.records[0].kind);
-		assertTrue(responseObject.records[0].createUser != null && responseObject.records[0].createTime != null);
-		assertTrue(responseObject.records[0].modifyUser != null && responseObject.records[0].modifyTime != null);
-		assertTrue(responseObject.records[0].version != null && !responseObject.records[0].version.isEmpty());
-		assertEquals(3, responseObject.records[0].data.size());
-	}
-
-	@Test
-	public void should_returnOnlyRequestedDataProperties_when_specificAttributesAreGiven() throws Exception {
-		JsonArray attributes = new JsonArray();
-		attributes.add("data.count");
-		JsonArray records = new JsonArray();
-		records.add(RECORD_ID + 1);
-
-		JsonObject body = new JsonObject();
-		body.add("records", records);
-		body.add("attributes", attributes);
-
-		CloseableHttpResponse response = TestUtils.send("query/records", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), body.toString(),
-				"");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		DummyRecordsHelper.RecordsMock responseObject = RECORDS_HELPER.getRecordsMockFromResponse(response);
-
-		assertEquals(1, responseObject.records[0].data.size());
-		assertEquals("1.23456789E8", responseObject.records[0].data.get("count").toString());
-	}
-
-	@Test
-	public void should_returnMultipleRecordsMatchingGivenIds_when_noAttributesAreGiven() throws Exception {
-		JsonArray attributes = new JsonArray();
-		JsonArray records = new JsonArray();
-		records.add(RECORD_ID + 0);
-		records.add(RECORD_ID + 1);
-		records.add(RECORD_ID + 2);
-
-		JsonObject body = new JsonObject();
-		body.add("records", records);
-		body.add("attributes", attributes);
-
-		CloseableHttpResponse response = TestUtils.send("query/records", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), body.toString(),
-				"");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		DummyRecordsHelper.RecordsMock responseObject = RECORDS_HELPER.getRecordsMockFromResponse(response);
-
-		assertEquals(3, responseObject.records.length);
-		assertEquals(0, responseObject.invalidRecords.length);
-		assertEquals(0, responseObject.retryRecords.length);
-
-		String[] ids = ArrayUtils.addAll(new String[] { responseObject.records[0].id }, responseObject.records[1].id,
-				responseObject.records[2].id);
-		assertTrue(Arrays.asList(ids).contains(RECORD_ID + 0));
-		assertTrue(Arrays.asList(ids).contains(RECORD_ID + 1));
-		assertTrue(Arrays.asList(ids).contains(RECORD_ID + 2));
-	}
-
-	@Test
-	public void should_returnInvalidRecord_when_nonExistingIDGiven() throws Exception {
-		JsonArray attributes = new JsonArray();
-		JsonArray records = new JsonArray();
-		String notExistingId = RECORD_ID_PREFIX + "nonexisting:id";
-		records.add(notExistingId);
-
-		JsonObject body = new JsonObject();
-		body.add("records", records);
-		body.add("attributes", attributes);
-
-		CloseableHttpResponse response = TestUtils.send("query/records", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), body.toString(),
-				"");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		DummyRecordsHelper.RecordsMock responseObject = RECORDS_HELPER.getRecordsMockFromResponse(response);
-
-		assertEquals(0, responseObject.records.length);
-		assertEquals(1, responseObject.invalidRecords.length);
-		assertEquals(notExistingId, responseObject.invalidRecords[0]);
-		assertEquals(0, responseObject.retryRecords.length);
-	}
 }

@@ -14,118 +14,90 @@
 
 package org.opengroup.osdu.storage.records;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+
+import org.opengroup.osdu.core.test.client.model.storage.QueryRecordsRequest;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+import org.opengroup.osdu.core.test.client.model.storage.Records;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper.RecordResultMock;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class RecordWithNullFieldTest extends TestBase {
+public final class RecordWithNullFieldTest extends BaseRecordsAcceptanceTest {
 
-	private static final Long NOW = System.currentTimeMillis();
-	private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
+  private String LEGAL_TAG;
+  private String KIND;
+  private String RECORD_ID;
 
-	private static final String KIND = TenantUtils.getTenantName() + ":test:endtoend:1.1."
-			+ NOW;
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":endtoend:1.1."
-			+ NOW;
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    LEGAL_TAG = getTenantId() + "-storage-" + now;
+    KIND = getTenantId() + ":test:endtoend:1.1." + now;
+    RECORD_ID = getTenantId() + ":endtoend:1.1." + now;
+    createLegalTag(LEGAL_TAG);
+  }
 
-	@BeforeEach
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-		LegalTagUtils.create(LEGAL_TAG, testUtils.getToken());
-	}
+  @Test
+  public void should_returnRecordWithoutNullFields_when_recordIsIngestedWithNullFields() {
+    HttpResponse<CreateRecordsResponse> response = storageClient.putRecordsSerializingNulls(
+        withTestAcl(RecordUtil.createRecordsWithData(RECORD_ID, KIND, LEGAL_TAG, null)));
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
 
-	@AfterEach
-	public void tearDown() throws Exception {
-		LegalTagUtils.delete(LEGAL_TAG, testUtils.getToken());
-		TestUtils.send(
-				"records/" + RECORD_ID,
-				"DELETE",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-				"",
-				""
-		);
-		this.testUtils = null;
-	}
+    var getResponse = storageClient.getRecord(RECORD_ID);
 
-	@Test
-	public void should_returnRecordWithoutNullFields_when_recordIsIngestedWithNullFields() throws Exception {
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
 
-		// create record with null field
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-				RecordUtil.createJsonRecordWithData(RECORD_ID, KIND, LEGAL_TAG, null), "");
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
+    StorageRecord record = getResponse.body();
+    assertEquals(58377304471659395L, record.data().get("score-int"));
+    assertEquals(58377304.471659395, record.data().get("score-double"));
+    assertNullDataField(record.data(), "custom");
 
-		// get record
-		response = TestUtils.send("records/" + RECORD_ID, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
+    var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.withAttributes(new String[0], RECORD_ID));
 
-		JsonObject json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-		JsonObject dataJson = json.get("data").getAsJsonObject();
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
 
-		assertEquals("58377304471659395", dataJson.get("score-int").toString());
-		assertEquals("5.837730447165939E7", dataJson.get("score-double").toString());
-		assertEquals(JsonNull.INSTANCE, dataJson.get("custom"));
+    Records responseObject = queryResponse.body();
+    assertEquals(1, responseObject.records().length);
+    assertEquals(0, responseObject.invalidRecords().length);
+    assertEquals(0, responseObject.retryRecords().length);
 
-		// query records without attribute
-		JsonArray attributes = new JsonArray();
-		JsonArray records = new JsonArray();
-		records.add(RECORD_ID);
+    StorageRecord result = responseObject.records()[0];
 
-		JsonObject body = new JsonObject();
-		body.add("records", records);
-		body.add("attributes", attributes);
+    assertEquals(58377304471659395L, result.data().get("score-int"));
+    assertEquals(58377304.471659395, result.data().get("score-double"));
+    assertNullDataField(result.data(), "custom");
 
-		response = TestUtils.send("query/records", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), body.toString(), "");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
+    queryResponse = storageClient.queryRecordsPost(
+        QueryRecordsRequest.withAttributes(new String[] {"data.custom"}, RECORD_ID));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    responseObject = queryResponse.body();
 
-		DummyRecordsHelper.RecordsMock responseObject = new DummyRecordsHelper().getRecordsMockFromResponse(response);
-		assertEquals(1, responseObject.records.length);
-		assertEquals(0, responseObject.invalidRecords.length);
-		assertEquals(0, responseObject.retryRecords.length);
+    assertEquals(1, responseObject.records().length);
+    assertEquals(0, responseObject.invalidRecords().length);
+    assertEquals(0, responseObject.retryRecords().length);
 
-		RecordResultMock result = responseObject.records[0];
+    result = responseObject.records()[0];
 
-		assertEquals(5.8377304471659392E16, result.data.get("score-int"));
-		assertEquals("5.837730447165939E7", result.data.get("score-double").toString());
-		assertTrue(result.data.containsKey("custom"));
-		assertEquals(null, result.data.get("custom"));
+    assertFalse(result.data().containsKey("score-int"));
+    assertFalse(result.data().containsKey("score-double"));
+    assertNullDataField(result.data(), "custom");
+  }
 
-		// query records with attribute
-		attributes.add("data.custom");
-
-		response = TestUtils.send("query/records", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), body.toString(), "");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		responseObject = new DummyRecordsHelper().getRecordsMockFromResponse(response);
-		assertEquals(1, responseObject.records.length);
-		assertEquals(0, responseObject.invalidRecords.length);
-		assertEquals(0, responseObject.retryRecords.length);
-
-		result = responseObject.records[0];
-
-		assertFalse(result.data.containsKey("score-int"));
-		assertFalse(result.data.containsKey("score-double"));
-		assertTrue(result.data.containsKey("custom"));
-		assertEquals(null, result.data.get("custom"));
-	}
+  private static void assertNullDataField(java.util.Map<String, Object> data, String field) {
+    assertNotNull(data);
+    assertTrue(data.containsKey(field), "expected data field '" + field + "' to be present");
+    assertNull(data.get(field));
+  }
 }

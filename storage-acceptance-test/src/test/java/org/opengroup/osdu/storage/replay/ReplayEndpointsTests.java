@@ -1,4 +1,4 @@
-// Copyright © Microsoft Corporation
+// Copyright Â© Microsoft Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,365 +14,325 @@
 
 package org.opengroup.osdu.storage.replay;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+import org.opengroup.osdu.core.test.client.model.storage.QueryResult;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+
+import lombok.extern.slf4j.Slf4j;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.google.gson.Gson;
+import com.google.common.base.Strings;
+
+import java.util.Map;
+
+import org.opengroup.osdu.core.test.client.model.replay.ReplayStartResponse;
+import org.opengroup.osdu.core.test.client.model.replay.ReplayStatusResponse;
+import org.opengroup.osdu.storage.model.search.SearchCountResponse;
+import org.opengroup.osdu.core.test.client.model.storage.RecordAcl;
+import org.opengroup.osdu.core.test.client.model.storage.RecordLegal;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.opengroup.osdu.storage.model.ReplayStatusResponseHelper;
-import org.opengroup.osdu.storage.records.RecordsApiAcceptanceTests;
-import org.opengroup.osdu.storage.util.ConfigUtils;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 import org.opengroup.osdu.storage.util.ReplayUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class ReplayEndpointsTests extends TestBase {
+@Slf4j
+public final class ReplayEndpointsTests extends BaseStorageAcceptanceTest {
 
-    private static String LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
+  private String LEGAL_TAG_NAME;
+  private String INVALID_KIND;
 
-    private static final String INVALID_KIND = TenantUtils.getTenantName() + ":ds:1.0."
-            + System.currentTimeMillis();
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    assumeTrue(configUtils.isTestReplayEnabled());
 
-    private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+    LEGAL_TAG_NAME = getTenantId() + "-storage-" + System.currentTimeMillis();
+    INVALID_KIND = getTenantId() + ":ds:1.0." + System.currentTimeMillis();
+    createLegalTag(LEGAL_TAG_NAME);
+  }
 
-    @BeforeAll
-    public static void classSetup() throws Exception {
-        ReplayEndpointsTests.classSetup(TOKEN_TEST_UTILS.getToken());
+  @Test
+  public void should_return_400_when_givenNoOperationNameIsNotInRequest() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.emptyReplayRequest()));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Operation field is required. The valid operations are: 'replay', 'reindex'.",
+        ex.getError().getMessage());
+  }
+
+  @Test
+  public void should_return_400_when_givenKindIsEmpty() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.replayRequest("reindex", new ArrayList<>())));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Currently restricted to a single valid kind.", ex.getError().getMessage());
+  }
+
+  @Test
+  public void should_return_400_when_givenKindSizeIsGreaterDenOne() throws Exception {
+    List<String> kindList = new ArrayList<>();
+    kindList.add(getKind());
+    kindList.add(getKind());
+
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.replayRequest("reindex", kindList)));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Currently restricted to a single valid kind.", ex.getError().getMessage());
+  }
+
+  @Test
+  public void Should_return_400_when_givenInvalidKind() {
+    List<String> kindList = new ArrayList<>();
+    kindList.add(INVALID_KIND);
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.replayRequest("reindex", kindList)));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("The requested kind does not exist.", ex.getError().getMessage());
+  }
+
+  @Test
+  public void Should_return_400_when_givenInvalidOperationName() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.replayRequest("invalidOperation")));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Not a valid operation. The valid operations are: [reindex, replay]",
+        ex.getError().getMessage());
+  }
+
+  @Test
+  public void should_return_400_when_request_contains_unknown_properties() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.replayRequestWithUnknownProperty()));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Invalid replay request payload.", ex.getError().getMessage());
+  }
+
+  @Test
+  public void should_return_200_GivenReplayAll() throws Exception {
+    if (configUtils.getIsTestReplayAllEnabled()) {
+      String kind_1 = getKind();
+      String kind_2 = getKind();
+      List<String> givenKindList = Arrays.asList(kind_1, kind_2);
+      createTestRecordForGivenCapacityAndKinds(500, 100, givenKindList);
+
+      var response = storageClient.queryKindsGet("?limit=10");
+      assertEquals(HttpStatus.SC_OK, response.statusCode());
+      QueryResult responseObject = response.body();
+      List<String> kindList = new ArrayList<>(Arrays.asList(responseObject.results()));
+      kindList.add(kind_1);
+      kindList.add(kind_2);
+
+      performValidationBeforeOrAfterReplay(kindList, givenKindList, "*:*:*:*", 2000);
+      ReplayStatusResponse replayStatus =
+          performReplay(ReplayUtils.replayRequest("reindex"));
+      assertEquals("COMPLETED", replayStatus.status());
+      assertNotNull(replayStatus.replayId());
+      performValidationBeforeOrAfterReplay(kindList, givenKindList, "*:*:*:*", 2000);
+    }
+  }
+
+  @Test
+  @Timeout(2)
+  public void should_return_200_givenSingleKind() throws Exception {
+    if (configUtils.getIsTestReplayAllEnabled()) {
+      String kind_1 = getKind();
+      List<String> kindList = new ArrayList<>();
+      kindList.add(kind_1);
+      List<String> ids = createTestRecordForGivenCapacityAndKinds(1, 1, kindList);
+
+      performValidationBeforeOrAfterReplay(kindList, kindList, kind_1, 1);
+      ReplayStatusResponse replayStatus =
+          performReplay(ReplayUtils.replayRequest("reindex", kindList));
+
+      assertEquals("COMPLETED", replayStatus.status());
+      assertNotNull(replayStatus.replayId());
+
+      performValidationBeforeOrAfterReplay(kindList, kindList, kind_1, 1);
+      deleteRecords(ids);
+    }
+  }
+
+  public List<String> createTestRecordForGivenCapacityAndKinds(int n, int factor,
+      List<String> kinds) throws Exception {
+    List<String> totalIds = new ArrayList<>();
+    for (String kind : kinds) {
+      int counter = n;
+      while (counter > 0) {
+        List<String> listIds = create_N_TestRecordForGivenKind(factor, kind);
+        totalIds = Stream.concat(totalIds.stream(), listIds.stream()).collect(Collectors.toList());
+        counter -= factor;
+        Thread.sleep(1000);
+      }
     }
 
-    @AfterAll
-    public static void classTearDown() throws Exception {
-        ReplayEndpointsTests.classTearDown(TOKEN_TEST_UTILS.getToken());
+    Thread.sleep(40000);
+    return totalIds;
+  }
+
+  @Test
+  public void should_return_400_when_givenEmptyJSONIsSent() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.startReplay(ReplayUtils.emptyReplayRequest()));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
+
+  private List<String> create_N_TestRecordForGivenKind(int n, String kind) {
+    List<String> ids = new ArrayList<>(n);
+    StorageRecord[] records = new StorageRecord[n];
+    for (int i = 0; i < n; i++) {
+      String id1 = getTenantId() + ":inttest:" + System.currentTimeMillis() + i;
+      records[i] = buildRecord(id1, "ash ketchum", kind, LEGAL_TAG_NAME);
+      ids.add(id1);
     }
 
-    @BeforeEach
-    @Override
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        this.configUtils = new ConfigUtils("test.properties");
-        assumeTrue(configUtils.isTestReplayEnabled());
+    var createResponse = storageClient.putRecords(records);
+
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+
+    CreateRecordsResponse result = createResponse.body();
+    assertEquals(n, result.recordCount());
+    assertEquals(n, result.recordIds().length);
+    assertEquals(n, result.recordIdVersions().length);
+
+    return ids;
+  }
+
+  private void performValidationBeforeOrAfterReplay(List<String> kinds, List<String> givenKindList,
+      String kindType, int totalReplayAllRecord) throws Exception {
+    long startTime = System.currentTimeMillis();
+
+    int initialRecordCount;
+    int countNoOfAPICalls = 0;
+    while ((initialRecordCount = getIndexedRecordCount(givenKindList)) != totalReplayAllRecord) {
+      if (countNoOfAPICalls > 10) {
+        fail();
+      }
+
+      Thread.sleep(configUtils.getTimeoutForReplay());
+      countNoOfAPICalls++;
     }
 
-    @AfterEach
-    @Override
-    public void tearDown() throws Exception {
-        this.testUtils = null;
+    assertEquals(totalReplayAllRecord, initialRecordCount);
+
+    log.info("Total count for Kind {} is {}", kindType, initialRecordCount);
+
+    for (String kind : kinds) {
+      sendDeleteIndex("index?kind=" + kind);
+      Thread.sleep(1000);
     }
 
-    public static void classSetup(String token) throws Exception {
-        LegalTagUtils.create(LEGAL_TAG_NAME, token);
+    int countOfRecord = getIndexedRecordCount(givenKindList);
+    log.info("Total count for Kind {} after deletion is {}", kindType, countOfRecord);
+    assertEquals(0, countOfRecord);
+
+    log.info("The end time for performValidationBeforeOrAfterReplay for KindType {}is {}", kindType,
+        System.currentTimeMillis() - startTime);
+  }
+
+  private ReplayStatusResponse performReplay(
+      org.opengroup.osdu.core.test.client.model.replay.ReplayRequest request) throws Exception {
+    HttpResponse<ReplayStartResponse> response;
+    try {
+      response = storageClient.startReplay(request);
+    } catch (ClientException e) {
+      if (e.getStatusCode() == HttpStatus.SC_INTERNAL_SERVER_ERROR) {
+        log.info("Error in replay call {}", e.getError().getMessage());
+      }
+      throw e;
     }
 
-    public static void classTearDown(String token) throws Exception {
-        LegalTagUtils.delete(LEGAL_TAG_NAME, token);
+    assertEquals(202, response.statusCode());
+
+    ReplayStartResponse startResponse = response.body();
+    String replayId = startResponse.replayId();
+    HttpResponse<ReplayStatusResponse> statusResponse =
+        storageClient.getReplayStatus(replayId);
+    assertEquals(HttpStatus.SC_OK, statusResponse.statusCode());
+
+    ReplayStatusResponse replayStatus = statusResponse.body();
+    log.info("Replay {} status: {}", replayId, replayStatus.status());
+
+    int countNoOfAPICalls = 0;
+
+    while (!"COMPLETED".equals(replayStatus.status())) {
+      assertNotEquals("FAILED", replayStatus.status());
+      statusResponse = storageClient.getReplayStatus(replayId);
+      assertEquals(HttpStatus.SC_OK, statusResponse.statusCode());
+      replayStatus = statusResponse.body();
+      log.info("Replay {} status: {} ({})", replayId, replayStatus.status(), replayStatus.message());
+
+      if (countNoOfAPICalls > 10) {
+        fail();
+      }
+
+      Thread.sleep(configUtils.getTimeoutForReplay());
+      countNoOfAPICalls++;
     }
 
-    @Test
-    public void should_return_400_when_givenNoOperationNameIsNotInRequest() throws Exception {
+    assertEquals(replayId, replayStatus.replayId());
+    return replayStatus;
+  }
 
-        String requestBody = ReplayUtils.createJsonEmpty();
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        String actualErrorMessage = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        assertEquals("Operation field is required. The valid operations are: 'replay', 'reindex'.", actualErrorMessage);
+  private void deleteRecords(List<String> ids) {
+    long startTime = System.currentTimeMillis();
+
+    ids.parallelStream().forEach((id) -> {
+      try {
+        storageClient.deleteRecord(id);
+      } catch (Exception ignored) {
+        // best-effort cleanup
+      }
+    });
+
+    log.info("The totalTime for delete Records for size {}is {}", ids.size(),
+        System.currentTimeMillis() - startTime);
+  }
+
+  private int getIndexedRecordCount(List<String> kinds) throws Exception {
+    int recordCountIndexed = 0;
+    for (String kind : kinds) {
+      SearchCountResponse countResponse = sendSearchQuery(ReplayUtils.searchCountRequest(kind));
+      recordCountIndexed += countResponse.totalCount();
     }
-
-    @Test
-    public void should_return_400_when_givenKindIsEmpty() throws Exception {
-
-        String requestBody = ReplayUtils.createJsonWithKind("reindex", new ArrayList<>());
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        String actualErrorMessage = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        assertEquals("Currently restricted to a single valid kind.", actualErrorMessage);
-    }
-
-    @Test
-    public void should_return_400_when_givenKindSizeIsGreaterDenOne() throws Exception {
-
-        List<String> kindList = new ArrayList<>();
-        kindList.add(getKind());
-        kindList.add(getKind());
-
-        String requestBody = ReplayUtils.createJsonWithKind("reindex", kindList);
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        String actualErrorMessage = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        assertEquals("Currently restricted to a single valid kind.", actualErrorMessage);
-    }
-
-    @Test
-    public void Should_return_400_when_givenInvalidKind() throws Exception {
-
-        List<String> kindList = new ArrayList<>();
-        kindList.add(INVALID_KIND);
-        String requestBody = ReplayUtils.createJsonWithKind("reindex", kindList);
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        String actualErrorMessage = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        assertEquals("The requested kind does not exist.", actualErrorMessage);
-    }
-
-    @Test
-    public void Should_return_400_when_givenInvalidOperationName() throws Exception {
-
-        String requestBody = ReplayUtils.createJsonWithOperationName("invalidOperation");
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        String actualErrorMessage = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        assertEquals("Not a valid operation. The valid operations are: [reindex, replay]", actualErrorMessage);
-    }
-
-    @Test
-    public void should_return_400_when_request_contains_unknown_properties() throws Exception {
-        String requestBody = ReplayUtils.createJsonWithUnknownProperty();
-        CloseableHttpResponse response = TestUtils.send("replay", "POST",
-            HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        String message = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-        assertEquals("Invalid replay request payload.", message);
-    }
-
-    @Test
-    public void should_return_200_GivenReplayAll() throws Exception {
-
-        if (configUtils != null && configUtils.getIsTestReplayAllEnabled()) {
-
-            String kind_1 = getKind();
-            String kind_2 = getKind();
-            List<String> givenKindList = Arrays.asList(kind_1, kind_2);
-            List<String> totalRecordIds = this.createTestRecordForGivenCapacityAndKinds(500, 100, givenKindList);
-
-            DummyRecordsHelper dummyRecordsHelper = new DummyRecordsHelper();
-
-            CloseableHttpResponse response = TestUtils.send("query/kinds", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=10");
-            assertEquals(HttpStatus.SC_OK, response.getCode());
-            DummyRecordsHelper.QueryResultMock responseObject = dummyRecordsHelper.getQueryResultMockFromResponse(response);
-            List<String> kindList = new ArrayList<>(Arrays.asList(responseObject.results));
-            kindList.add(kind_1);
-            kindList.add(kind_2);
-
-            performValidationBeforeOrAfterReplay(kindList, givenKindList, "*:*:*:*", 2000);
-            String requestBody = ReplayUtils.createJsonWithOperationName("reindex");
-            ReplayStatusResponseHelper replayStatusResponseHelper = this.performReplay(requestBody);
-            assertEquals("reindex", replayStatusResponseHelper.getOperation());
-
-            assertNull(replayStatusResponseHelper.getFilter());
-            assertEquals(1, replayStatusResponseHelper.getStatus().size());
-            performValidationBeforeOrAfterReplay(kindList, givenKindList, "*:*:*:*", 2000);
-        }
-    }
-
-    @Test
-    @Timeout(2)
-    public void should_return_200_givenSingleKind() throws Exception {
-
-        if (configUtils != null && configUtils.getIsTestReplayAllEnabled()) {
-
-            String kind_1 = getKind();
-            List<String> kindList = new ArrayList<>();
-            kindList.add(kind_1);
-            List<String> ids = this.createTestRecordForGivenCapacityAndKinds(1, 1, kindList);
-
-            performValidationBeforeOrAfterReplay(kindList, kindList, kind_1, 1);
-            String requestBody = ReplayUtils.createJsonWithKind("reindex", kindList);
-            ReplayStatusResponseHelper replayStatusResponseHelper = performReplay(requestBody);
-
-            assertEquals("reindex", replayStatusResponseHelper.getOperation());
-            assertEquals(1, replayStatusResponseHelper.getFilter().getKinds().size());
-            assertEquals(1, replayStatusResponseHelper.getStatus().size());
-            assertEquals(kind_1, replayStatusResponseHelper.getFilter().getKinds().get(0));
-
-            performValidationBeforeOrAfterReplay(kindList, kindList, kind_1, 1);
-            deleteRecords(ids);
-        }
-    }
-
-    public List<String> createTestRecordForGivenCapacityAndKinds(int n, int factor, List<String> kinds) throws Exception {
-
-        int totalRecordCount = n * kinds.size();
-        long startTime = System.currentTimeMillis();
-        List<String> totalIds = new ArrayList<>();
-        for (String kind : kinds) {
-            int counter = n;
-            while (counter > 0) {
-                List<String> listIds = create_N_TestRecordForGivenKind(factor, kind);
-                totalIds = Stream.concat(totalIds.stream(), listIds.stream()).collect(Collectors.toList());
-                counter -= factor;
-                Thread.sleep(1000);
-            }
-
-        }
-
-        Thread.sleep(40000);
-        return totalIds;
-    }
-
-    @Test
-    public void should_return_400_when_givenEmptyJSONIsSent() throws Exception {
-
-        String requestBody = ReplayUtils.createJsonEmpty();
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-    }
-
-    protected List<String> create_N_TestRecordForGivenKind(int n, String kind) throws Exception {
-
-        String json = "";
-        List<String> ids = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            String id1 = TenantUtils.getTenantName() + ":inttest:" + System.currentTimeMillis() + i;
-            json += RecordsApiAcceptanceTests.singleEntityBody(id1, "ash ketchum", kind, LEGAL_TAG_NAME);
-            if (i != n - 1) {
-                json += ",";
-            }
-            ids.add(id1);
-        }
-
-        json = "[" + json + "]";
-
-        CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), json, "");
-
-        String responseJson = EntityUtils.toString(response.getEntity());
-        assertEquals(HttpStatus.SC_CREATED, response.getCode());
-        Gson gson = new Gson();
-        DummyRecordsHelper.CreateRecordResponse result = gson.fromJson(
-                responseJson,
-                DummyRecordsHelper.CreateRecordResponse.class
-                                                                      );
-        assertEquals(n, result.recordCount);
-        assertEquals(n, result.recordIds.length);
-        assertEquals(n, result.recordIdVersions.length);
-
-        return ids;
-    }
-
-    private void performValidationBeforeOrAfterReplay(List<String> kinds, List<String> givenKindList, String kindType, int totalReplayAllRecord) throws Exception {
-
-        long startTime = System.currentTimeMillis();
-        CloseableHttpResponse response = null;
-
-        int initialRecordCount = 0;
-        int countNoOfAPICalls = 0;
-        while ((initialRecordCount = getIndexedRecordCount(givenKindList)) != totalReplayAllRecord) {
-            if (countNoOfAPICalls > 10)
-                fail();
-
-            Thread.sleep(configUtils.getTimeoutForReplay());
-            countNoOfAPICalls++;
-        }
-
-        assertEquals(totalReplayAllRecord, initialRecordCount);
-
-        System.out.println("Total count for Kind " + kindType + " is " + initialRecordCount);
-
-        for (String kind : kinds) {
-            response = TestUtils.send(ReplayUtils.getIndexerUrl(), "index?kind=" + kind, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-            Thread.sleep(1000);
-        }
-
-        int countOfRecord = getIndexedRecordCount(givenKindList);
-        System.out.println("Total count for Kind " + kindType + " after deletion is " + countOfRecord);
-        assertEquals(0, countOfRecord);
-
-        System.out.println("The end time for performValidationBeforeOrAfterReplay for KindType " + kindType + "is " + (System.currentTimeMillis() - startTime));
-    }
-
-    private ReplayStatusResponseHelper performReplay(String requestBody) throws Exception {
-
-        CloseableHttpResponse response = TestUtils.send("replay", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-
-        if (response.getCode() == HttpStatus.SC_INTERNAL_SERVER_ERROR)
-            System.out.println("Error in replay call  " + ReplayUtils.getFieldFromResponse(response, "message"));
-
-        assertEquals(202, response.getCode());
-
-        String replayId = ReplayUtils.getFieldFromResponse(response, "replayId");
-        response = TestUtils.send("replay/status/", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", replayId);
-
-        ReplayStatusResponseHelper replayStatusResponseHelper = ReplayUtils.getConvertedReplayStatusResponseFromResponse(response);
-        System.out.println("Total Number of Record to be Processed for Replay " + replayStatusResponseHelper.getTotalRecords());
-
-        int countNoOfAPICalls = 0;
-
-        while (!replayStatusResponseHelper.getOverallState().equals("COMPLETED")) {
-            assertNotEquals("FAILED", replayStatusResponseHelper.getOverallState());
-            response = TestUtils.send("replay/status/", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", replayId);
-            replayStatusResponseHelper = ReplayUtils.getConvertedReplayStatusResponseFromResponse(response);
-            if (replayStatusResponseHelper.getStatus() != null && !replayStatusResponseHelper.getStatus().isEmpty())
-                System.out.println("Number of Record to be Processed for Replay  " + replayStatusResponseHelper.getStatus().get(0).getProcessedRecords());
-
-            if (countNoOfAPICalls > 10)
-                 fail();
-
-            Thread.sleep(configUtils.getTimeoutForReplay());
-            countNoOfAPICalls++;
-        }
-
-        assertEquals(replayId, replayStatusResponseHelper.getReplayId());
-        return replayStatusResponseHelper;
-    }
-
-    protected void deleteRecords(List<String> ids) {
-
-        long startTime = System.currentTimeMillis();
-
-        ids.parallelStream().forEach((id) -> {
-            try {
-                TestUtils.send("records/" + id, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-            } catch (Exception e) {
-            }
-        });
-
-        System.out.println("The totalTime for delete Records for size " + ids.size() + "is " + (System.currentTimeMillis() - startTime));
-    }
-
-    private int getIndexedRecordCount(List<String> kinds) throws Exception {
-
-        int recordCountIndexed = 0;
-        for (String kind : kinds) {
-            String requestBody = ReplayUtils.getSearchCountQueryForKind(kind);
-            CloseableHttpResponse response = TestUtils.send(ReplayUtils.getSearchUrl(), "query", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), requestBody, "");
-            recordCountIndexed += Integer.parseInt(ReplayUtils.getFieldFromResponse(response, "totalCount"));
-
-        }
-        return recordCountIndexed;
-    }
-
-    @Test
-    public void should_return_404_when_givenInvalidReplayID() throws Exception {
-
-        CloseableHttpResponse response = TestUtils.send("replay/status/", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "1234");
-        String actualErrorMessage = ReplayUtils.getFieldFromResponse(response, "message");
-        assertEquals("The replay ID 1234 is invalid.", actualErrorMessage);
-        assertEquals(404, response.getCode());
-    }
-
-    public static String getKind() throws InterruptedException {
-
-        Thread.sleep(1);
-        return TenantUtils.getTenantName() + ":ds:inttest:1.0." + System.nanoTime();
-    }
+    return recordCountIndexed;
+  }
+
+  @Test
+  public void should_return_404_when_givenInvalidReplayID() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.getReplayStatus("1234"));
+    assertEquals(HttpStatus.SC_NOT_FOUND, ex.getStatusCode());
+    assertEquals("The replay ID 1234 is invalid.", ex.getError().getMessage());
+  }
+
+  public String getKind() throws InterruptedException {
+    Thread.sleep(1);
+    return getTenantId() + ":ds:inttest:1.0." + System.nanoTime();
+  }
+
+  private StorageRecord buildRecord(String id, String name, String kind, String legalTagName) {
+    RecordAcl acl = new RecordAcl(new String[] {getAcl()}, new String[] {getAcl()});
+    RecordLegal legal = new RecordLegal(new String[] {legalTagName}, new String[] {"BR"});
+    String recordId = Strings.isNullOrEmpty(id) ? null : id;
+    return new StorageRecord(recordId, null, kind, acl, Map.of("name", name), legal, null, null, null,
+        null, null, null, null);
+  }
 }

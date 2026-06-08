@@ -14,141 +14,111 @@
 
 package org.opengroup.osdu.storage.misc;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.opengroup.osdu.core.test.client.HttpResponse;
 
-import com.google.gson.Gson;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+
+import lombok.extern.slf4j.Slf4j;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import com.google.common.base.Strings;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import java.util.Map;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+import org.opengroup.osdu.core.test.client.model.storage.RecordAcl;
+import org.opengroup.osdu.core.test.client.model.storage.RecordLegal;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.records.RecordsApiAcceptanceTests;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 
-public final class StressTests extends TestBase {
+@Slf4j
+public final class StressTests extends BaseStorageAcceptanceTest {
 
-	private static final String RECORD_ID = TenantUtils.getTenantName()
-			+ ":WG-Multi-Client:flatten-full-seismic-2d-shape_survey_2d_0623_Survey2D_Angola_Lower_Congo_2D_Repro_AWG98_26_1";
+  private static String LEGAL_TAG_NAME;
+  private static String KIND;
 
-	private static String LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    KIND = getTenantId() + ":ds:inttest:1.0." + System.currentTimeMillis();
+    LEGAL_TAG_NAME = getTenantId() + "-storage-" + System.currentTimeMillis();
 
-	private static final String KIND = TenantUtils.getTenantName() + ":ds:inttest:1.0."
-			+ System.currentTimeMillis();
+    createLegalTag(LEGAL_TAG_NAME);
+  }
 
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+  @Test
+  public void should_create100Records_when_givenValidRecord() {
+    performanceTestCreateAndUpdateRecord(100);
+  }
 
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		StressTests.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
+  @Test
+  public void should_create10Records_when_givenValidRecord() {
+    performanceTestCreateAndUpdateRecord(10);
+  }
 
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		StressTests.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
+  @Test
+  public void should_create1Records_when_givenValidRecord() {
+    performanceTestCreateAndUpdateRecord(1);
+  }
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+  private void performanceTestCreateAndUpdateRecord(int capacity) {
+    List<String> ids = new ArrayList<>(capacity);
+    StorageRecord[] records = new StorageRecord[capacity];
+    for (int i = 0; i < capacity; i++) {
+      String id = getTenantId() + ":inttest:" + System.currentTimeMillis() + i;
+      records[i] = buildRecord(id, "ash ketchum", KIND, LEGAL_TAG_NAME);
+      ids.add(id);
+    }
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+    long startMillis = System.currentTimeMillis();
+    var createResponse = storageClient.putRecords(records);
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+    CreateRecordsResponse result = createResponse.body();
+    long totalMillis = System.currentTimeMillis() - startMillis;
+    log.info("Took {} milliseconds to Create {} 1KB records", totalMillis, ids.size());
 
-	public static void classSetup(String token) throws Exception {
-		LegalTagUtils.create(LEGAL_TAG_NAME, token);
-	}
+    assertEquals(capacity, result.recordCount());
+    assertEquals(capacity, result.recordIds().length);
+    assertEquals(capacity, result.recordIdVersions().length);
 
-	public static void classTearDown(String token) throws Exception {
-		TestUtils.send("records/", "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", RECORD_ID);
-		LegalTagUtils.delete(LEGAL_TAG_NAME, token);
-	}
+    startMillis = System.currentTimeMillis();
+    HttpResponse<CreateRecordsResponse> putResponse = storageClient.putRecords("?skipdupes=false", records);
+    totalMillis = System.currentTimeMillis() - startMillis;
+    assertEquals(HttpStatus.SC_CREATED, putResponse.statusCode());
+    log.info("Took {} milliseconds to Update {} 1KB records", totalMillis, ids.size());
 
-	@Test
-	public void should_create100Records_when_givenValidRecord() throws Exception {
-		this.performanceTestCreateAndUpdateRecord(100);
-	}
+    startMillis = System.currentTimeMillis();
+    putResponse = storageClient.putRecords("?skipdupes=false", records);
+    totalMillis = System.currentTimeMillis() - startMillis;
+    assertEquals(HttpStatus.SC_CREATED, putResponse.statusCode());
+    log.info(
+        "Took {} milliseconds to Update {} 1KB records when when skipdupes is true",
+        totalMillis, ids.size());
 
-	@Test
-	public void should_create10Records_when_givenValidRecord() throws Exception {
-		this.performanceTestCreateAndUpdateRecord(10);
-	}
+    startMillis = System.currentTimeMillis();
+    HttpResponse<StorageRecord> getResponse = storageClient.getRecord(ids.get(0));
+    totalMillis = System.currentTimeMillis() - startMillis;
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
+    log.info("Took {} milliseconds to GET 1 1KB record", totalMillis);
 
-	@Test
-	public void should_create1Records_when_givenValidRecord() throws Exception {
-		this.performanceTestCreateAndUpdateRecord(1);
-	}
+    ids.parallelStream().forEach(id -> {
+      try {
+        storageClient.deleteRecord(id);
+      } catch (Exception ignored) {
+        // best-effort cleanup for performance test records
+      }
+    });
+  }
 
-	protected void performanceTestCreateAndUpdateRecord(int capacity) throws Exception {
-		String json = "";
-		List<String> ids = new ArrayList<>(capacity);
-		for (int i = 0; i < capacity; i++) {
-			String id1 = TenantUtils.getTenantName() + ":inttest:" + System.currentTimeMillis() + i;
-			json += RecordsApiAcceptanceTests.singleEntityBody(id1, "ash ketchum", KIND, LEGAL_TAG_NAME);
-			if (i != capacity - 1) {
-				json += ",";
-			}
-			ids.add(id1);
-		}
-
-		json = "[" + json + "]";
-
-		long startMillis = System.currentTimeMillis();
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), json, "");
-		long totalMillis = System.currentTimeMillis() - startMillis;
-		System.out.println(String.format("Took %s milliseconds to Create %s 1KB records", totalMillis, ids.size()));
-
-		String responseJson = EntityUtils.toString(response.getEntity());
-		System.out.println(responseJson);
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-		assertTrue(response.getEntity().getContentType().toString().contains("application/json"));
-		Gson gson = new Gson();
-		DummyRecordsHelper.CreateRecordResponse result = gson.fromJson(responseJson,
-				DummyRecordsHelper.CreateRecordResponse.class);
-		assertEquals(capacity, result.recordCount);
-		assertEquals(capacity, result.recordIds.length);
-		assertEquals(capacity, result.recordIdVersions.length);
-
-		startMillis = System.currentTimeMillis();
-		response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), json, "?skipdupes=false");
-		totalMillis = System.currentTimeMillis() - startMillis;
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-		System.out.println(String.format("Took %s milliseconds to Update %s 1KB records", totalMillis, ids.size()));
-
-		startMillis = System.currentTimeMillis();
-		response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), json, "?skipdupes=false");
-		totalMillis = System.currentTimeMillis() - startMillis;
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-		System.out.println(String.format("Took %s milliseconds to Update %s 1KB records when when skipdupes is true",
-				totalMillis, ids.size()));
-
-		startMillis = System.currentTimeMillis();
-		response = TestUtils.send("records/" + ids.get(0), "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		totalMillis = System.currentTimeMillis() - startMillis;
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-		System.out.println(String.format("Took %s milliseconds to GET 1 1KB record", totalMillis));
-
-		ids.parallelStream().forEach((id) -> {
-			try {
-				TestUtils.send("records/" + id, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-			} catch (Exception e) {
-			}
-		});
-	}
+  private StorageRecord buildRecord(String id, String name, String kind, String legalTagName) {
+    RecordAcl acl = new RecordAcl(new String[] {getAcl()}, new String[] {getAcl()});
+    RecordLegal legal = new RecordLegal(new String[] {legalTagName}, new String[] {"BR"});
+    String recordId = Strings.isNullOrEmpty(id) ? null : id;
+    return new StorageRecord(recordId, null, kind, acl, Map.of("name", name), legal, null, null, null,
+        null, null, null, null);
+  }
 }

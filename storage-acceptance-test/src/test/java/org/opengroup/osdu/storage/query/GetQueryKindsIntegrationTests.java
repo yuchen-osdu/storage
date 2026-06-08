@@ -14,86 +14,68 @@
 
 package org.opengroup.osdu.storage.query;
 
+import  org.opengroup.osdu.core.test.client.model.storage.QueryResult;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import java.util.Map;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 
+public final class GetQueryKindsIntegrationTests extends BaseStorageAcceptanceTest {
 
-public final class GetQueryKindsIntegrationTests extends TestBase {
+  @Test
+  public void should_returnMax1000Results_when_settingLimitToAValueLessThan1() {
+    if (configUtils.getIsSchemaEndpointsEnabled()) {
+      var response = storageClient.queryKindsGet("?limit=0");
+      assertEquals(HttpStatus.SC_OK, response.statusCode());
+      QueryResult responseObject = response.body();
 
-	private static final DummyRecordsHelper RECORD_HELPER = new DummyRecordsHelper();
+      assertTrue(responseObject.results().length > 1 && responseObject.results().length <= 1000);
+    }
+  }
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+  @Test
+  public void should_return400ErrorResult_when_givingAnInvalidCursorParameter() {
+    if (configUtils.getIsSchemaEndpointsEnabled()) {
+      ClientException ex = assertThrows(ClientException.class,
+          () -> storageClient.queryKindsGet("?cursor=badCursorString"));
+      assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+      assertEquals("Cursor invalid", ex.getError().getReason());
+      assertEquals("The requested cursor does not exist or is invalid", ex.getError().getMessage());
+    }
+  }
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+  @Test
+  public void should_return2Results_when_requesting2Items() {
+    if (configUtils.getIsSchemaEndpointsEnabled()) {
+      var response = storageClient.queryKindsGet("?limit=2");
+      assertEquals(HttpStatus.SC_OK, response.statusCode());
+      QueryResult responseObject = response.body();
 
-	@Test
-	public void should_returnMax1000Results_when_settingLimitToAValueLessThan1() throws Exception {
-		if (configUtils != null && configUtils.getIsSchemaEndpointsEnabled()) {
-			CloseableHttpResponse response = TestUtils.send("query/kinds", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=0");
-			assertEquals(HttpStatus.SC_OK, response.getCode());
+      assertEquals(2, responseObject.results().length);
+    }
+  }
 
-			DummyRecordsHelper.QueryResultMock responseObject = RECORD_HELPER.getQueryResultMockFromResponse(response);
+  @Test
+  public void should_returnBadRequest_when_dataPartitionIDIsMissing() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.queryKindsGet("?limit=2", Map.of("data-partition-id", "")));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
 
-			assertTrue(responseObject.results.length > 1 && responseObject.results.length <= 1000);
-		}
-	}
-
-	@Test
-	public void should_return400ErrorResult_when_givingAnInvalidCursorParameter() throws Exception {
-		if (configUtils != null && configUtils.getIsSchemaEndpointsEnabled()) {
-			CloseableHttpResponse response = TestUtils.send("query/kinds", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "",
-					"?cursor=badCursorString");
-			assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-
-      assertEquals(
-          "{\"code\":400,\"reason\":\"Cursor invalid\",\"message\":\"The requested cursor does not exist or is invalid\"}",
-          EntityUtils.toString(response.getEntity()));
-		}
-	}
-
-	@Test
-	public void should_return2Results_when_requesting2Items() throws Exception {
-			if (configUtils != null && configUtils.getIsSchemaEndpointsEnabled()) {
-			CloseableHttpResponse response = TestUtils.send("query/kinds", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=2");
-			assertEquals(HttpStatus.SC_OK, response.getCode());
-
-			DummyRecordsHelper.QueryResultMock responseObject = RECORD_HELPER.getQueryResultMockFromResponse(response);
-
-			assertEquals(2, responseObject.results.length);
-		}
-	}
-
-	@Test
-	public void should_returnBadRequest_when_dataPartitionIDIsMissing() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("query/kinds", "GET", HeaderUtils.getHeadersWithoutDataPartitionId(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=2");
-		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-	}
-
-	@Test
-	public void should_returnNotFoundOrUnauthorized_when_dataPartitionIDIsInvalid() throws Exception {
-		String invalidTestDataPartitionId = "test-data-partition";
-		CloseableHttpResponse response = TestUtils.send("query/kinds", "GET", HeaderUtils.getHeaders(invalidTestDataPartitionId, testUtils.getToken()), "", "?limit=2");
-		assertTrue(response.getCode() == HttpStatus.SC_UNAUTHORIZED || response.getCode() == HttpStatus.SC_NOT_FOUND || response.getCode() == HttpStatus.SC_FORBIDDEN);
-	}
+  @Test
+  public void should_returnNotFoundOrUnauthorized_when_dataPartitionIDIsInvalid() {
+    String invalidTestDataPartitionId = "test-data-partition";
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.queryKindsGet("?limit=2",
+            Map.of("data-partition-id", invalidTestDataPartitionId)));
+    assertTrue(ex.getStatusCode() == HttpStatus.SC_UNAUTHORIZED
+        || ex.getStatusCode() == HttpStatus.SC_NOT_FOUND
+        || ex.getStatusCode() == HttpStatus.SC_FORBIDDEN);
+  }
 }

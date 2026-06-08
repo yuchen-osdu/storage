@@ -14,189 +14,121 @@
 
 package org.opengroup.osdu.storage.query;
 
+import org.junit.jupiter.api.Assertions;
+import org.opengroup.osdu.core.test.client.model.storage.QueryResult;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.ClientException;
 
-public final class GetQueryRecordsIntegrationTest extends TestBase {
+public final class GetQueryRecordsIntegrationTest extends BaseQueryRecordsAcceptanceTest {
 
-	private static final long NOW = System.currentTimeMillis();
+  @Test
+  public void should_return5Ids_when_requestingKindThatHas5Entries() {
+    var response = storageClient.queryRecordsGet("?kind=" + KIND);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    QueryResult responseObject = response.body();
+    assertEquals(5, responseObject.results().length);
+  }
 
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":query:" + NOW;
-	private static final String KIND = TenantUtils.getTenantName() + ":ds:query:1.0." + NOW;
-	private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
-	private static final DummyRecordsHelper RECORDS_HELPER = new DummyRecordsHelper();
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+  @Test
+  public void should_incrementThroughIds_when_requestingKindThatHasMoreThanOneEntry_and_limitIsSetTo2_and_usingPreviousCursorPos() {
 
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		GetQueryRecordsIntegrationTest.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
+    Set<String> result = new HashSet<>();
 
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		GetQueryRecordsIntegrationTest.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
+    HttpResponse<QueryResult> response = queryRecordsOrFail("?limit=2&kind=" + KIND);
+    Assertions.assertNotNull(response);
+    Assertions.assertNotNull(response);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    QueryResult responseObject = response.body();
+    assertEquals(2, responseObject.results().length);
+    assertFalse(StringUtils.isEmpty(responseObject.cursor()));
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+    result.add(responseObject.results()[0]);
+    result.add(responseObject.results()[1]);
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+    String cursor = responseObject.cursor();
 
-	public static void classSetup(String token) throws Exception {
-		LegalTagUtils.create(LEGAL_TAG, token);
-		String jsonInput = RecordUtil.createDefaultJsonRecords(5, RECORD_ID, KIND, LEGAL_TAG);
+    response = queryRecordsOrFail("?limit=2&cursor=" + cursor + "&kind=" + KIND);
+    Assertions.assertNotNull(response);
+    Assertions.assertNotNull(response);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    responseObject = response.body();
+    assertEquals(2, responseObject.results().length);
+    assertFalse(StringUtils.isEmpty(responseObject.cursor()));
 
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), jsonInput, "");
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-	}
+    result.add(responseObject.results()[0]);
+    result.add(responseObject.results()[1]);
 
-	public static void classTearDown(String token) throws Exception {
-		TestUtils.send("records/" + RECORD_ID + 0, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID + 1, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID + 2, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID + 3, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-		TestUtils.send("records/" + RECORD_ID + 4, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
+    cursor = responseObject.cursor();
 
-		LegalTagUtils.delete(LEGAL_TAG, token);
-	}
+    response = queryRecordsOrFail("?limit=2&cursor=" + cursor + "&kind=" + KIND);
+    Assertions.assertNotNull(response);
+    Assertions.assertNotNull(response);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    responseObject = response.body();
+    assertEquals(1, responseObject.results().length);
 
-	@Test
-	public void should_return5Ids_when_requestingKindThatHas5Entries() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?kind=" + KIND);
-		assertEquals(HttpStatus.SC_OK, response.getCode());
+    result.add(responseObject.results()[0]);
 
-		DummyRecordsHelper.QueryResultMock responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-		assertEquals(5, responseObject.results.length);
-	}
+    assertEquals(5, result.size());
+  }
 
-	@Test
-	public void should_incrementThroughIds_when_requestingKindThatHasMoreThanOneEntry_and_limitIsSetTo2_and_usingPreviousCursorPos()
-			throws Exception {
+  @Test
+  public void should_returnError400_when_usingKindThatHasBadFormat() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.queryRecordsGet("?limit=1&kind=bad:kind"));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
 
-		Set<String> result = new HashSet<>();
+  @Test
+  public void should_returnNoResults_when_usingKindThatDoesNotExist() {
+    var response = storageClient.queryRecordsGet("?limit=1&kind=nonexisting:kind:formatted:1.0.0");
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    QueryResult responseObject = response.body();
 
-		// first call
-		CloseableHttpResponse response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=2&kind=" + KIND);
-		if (response.getCode() != HttpStatus.SC_OK) {
-			fail(formResponseCheckingMessage(response));
-		}
-		DummyRecordsHelper.QueryResultMock responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-		assertEquals(2, responseObject.results.length);
-		assertFalse(StringUtils.isEmpty(responseObject.cursor));
+    assertEquals(0, responseObject.results().length);
+  }
 
-		result.add(responseObject.results[0]);
-		result.add(responseObject.results[1]);
+  @Test
+  public void should_returnError400_when_usingInvalidCursorParameter() {
+    String kind = getTenantId() + ":storage:inttest:1.0.0" + System.currentTimeMillis();
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.queryRecordsGet("?limit=1&cursor=MY_BAD_CURSOR&kind=" + kind));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
 
-		String cursor = responseObject.cursor;
+  @Test
+  public void should_returnError400_when_notProvidingKindParameter() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.queryRecordsGet("?limit=1&kind="));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
 
-		// second call
-		response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "",
-				"?limit=2&cursor=" + cursor + "&kind=" + KIND);
-		if (response.getCode() != HttpStatus.SC_OK) {
-			fail(formResponseCheckingMessage(response));
-		}
-		responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-		assertEquals(2, responseObject.results.length);
-		assertFalse(StringUtils.isEmpty(responseObject.cursor));
+    ex = assertThrows(ClientException.class,
+        () -> storageClient.queryRecordsGet("?limit=1"));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
 
-		result.add(responseObject.results[0]);
-		result.add(responseObject.results[1]);
+  private HttpResponse<QueryResult> queryRecordsOrFail(String query) {
+    try {
+      return storageClient.queryRecordsGet(query);
+    } catch (ClientException e) {
+      fail(formResponseCheckingMessage(e));
+      return null;
+    }
+  }
 
-		cursor = responseObject.cursor;
-
-		// third call
-		response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "",
-				"?limit=2&cursor=" + cursor + "&kind=" + KIND);
-		if (response.getCode() != HttpStatus.SC_OK) {
-			fail(formResponseCheckingMessage(response));
-		}
-		responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-		assertEquals(1, responseObject.results.length);
-
-		result.add(responseObject.results[0]);
-
-		assertEquals(5, result.size());
-	}
-
-	@Test
-	public void should_returnError400_when_usingKindThatHasBadFormat() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=1&kind=bad:kind");
-		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-	}
-
-	@Test
-	public void should_returnNoResults_when_usingKindThatDoesNotExist() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "",
-				"?limit=1&kind=nonexisting:kind:formatted:1.0.0");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-		DummyRecordsHelper.QueryResultMock responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-
-		assertEquals(0, responseObject.results.length);
-	}
-
-	@Test
-	public void should_returnError400_when_usingInvalidCursorParameter() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "",
-				"?limit=1&cursor=MY_BAD_CURSOR&kind=" + RECORDS_HELPER.KIND);
-		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-	}
-
-	@Test
-	public void should_returnError400_when_notProvidingKindParameter() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=1&kind=");
-		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-
-		response = TestUtils.send("query/records", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=1");
-		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-	}
-
-	protected String formResponseCheckingMessage(CloseableHttpResponse response) {
-		JsonObject json;
-		try {
-			json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		} catch (ParseException e) {
-			throw new RuntimeException(e);
-		}
-		StringBuilder output = new StringBuilder();
-		output.append("API is not acting properly, responde code is: ")
-				.append(String.valueOf(response.getCode()))
-				.append(". And the reason is: ")
-				.append(json.get("reason").getAsString())
-		        .append(response.getHeaders("correlation-id")[0]);
-		return  output.toString();
-	}
+  private String formResponseCheckingMessage(ClientException ex) {
+    return "API is not acting properly, response code is: " + ex.getStatusCode()
+        + ". And the reason is: " + ex.getError().getReason();
+  }
 }

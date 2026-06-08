@@ -18,18 +18,26 @@
 package org.opengroup.osdu.storage.util;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
 
 public class FileReadUtil {
 
-  private static Gson gson = new Gson();
+  private static final Gson GSON = new GsonBuilder()
+      .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
+      .serializeNulls()
+      .create();
 
-  public static JsonObject readRecordFromFile(String filename) {
+  public static StorageRecord readRecordFromFile(String filename) throws IOException {
     InputStream file = FileReadUtil.class.getClassLoader().getResourceAsStream(filename);
-    BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(file));
-    return gson.fromJson(bufferedReader, JsonObject.class);
+    assert file != null;
+    try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(file))) {
+      return GSON.fromJson(bufferedReader, StorageRecord.class);
+    }
   }
 }

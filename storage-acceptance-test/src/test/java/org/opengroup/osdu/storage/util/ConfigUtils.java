@@ -16,6 +16,8 @@
 
 package org.opengroup.osdu.storage.util;
 
+import org.opengroup.osdu.core.test.config.EnvLoader;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
@@ -48,7 +50,7 @@ public class ConfigUtils {
     }
 
     public boolean getIsSchemaEndpointsEnabled() {
-        return !getBooleanProperty("schema.endpoints.disabled", "true");
+        return getBooleanProperty("schema.endpoints.enabled", "true");
     }
     public boolean getIsCollaborationEnabled() {
         return getBooleanProperty("collaboration.enabled", "false");
@@ -61,7 +63,7 @@ public class ConfigUtils {
     public long getTimeoutForReplay() { return  getLongProperty("test.replayAll.timeout", "60");}
 
     private static String getEnvValue(String propertyName) {
-        return System.getenv(propertyName.toUpperCase().replaceAll("\\.", "_"));
+        return EnvLoader.get(propertyName.toUpperCase().replaceAll("\\.", "_"));
     }
 
 }

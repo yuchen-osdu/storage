@@ -14,77 +14,64 @@
 
 package org.opengroup.osdu.storage.records;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.util.Map;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
+import org.opengroup.osdu.core.test.client.model.storage.RecordVersions;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class DeleteRecordLogicallyAndItsVersionsTest extends TestBase {
+public final class DeleteRecordLogicallyAndItsVersionsTest extends BaseRecordsAcceptanceTest {
 
-	private static final Long NOW = System.currentTimeMillis();
-	private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
+  private String LEGAL_TAG;
+  private String KIND;
+  private String RECORD_ID;
 
-	private static final String KIND = TenantUtils.getTenantName() + ":test:endtoend:1.1."
-			+ NOW;
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":endtoend:1.1."
-			+ NOW;
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    LEGAL_TAG = getTenantId() + "-storage-" + now;
+    KIND = getTenantId() + ":test:endtoend:1.1." + now;
+    RECORD_ID = getTenantId() + ":endtoend:1.1." + now;
 
-	@BeforeEach
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-		LegalTagUtils.create(LEGAL_TAG, testUtils.getToken());
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-				RecordUtil.createJsonRecordWithData(RECORD_ID, KIND, LEGAL_TAG, "v1"), "");
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-	}
+    createLegalTag(LEGAL_TAG);
+    HttpResponse<CreateRecordsResponse> response = storageClient.putRecords(
+        withTestAcl(RecordUtil.createRecordsWithData(RECORD_ID, KIND, LEGAL_TAG, "v1")));
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
+  }
 
-	@AfterEach
-	public void tearDown() throws Exception {
-		TestUtils.send("records/" + RECORD_ID, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		LegalTagUtils.delete(LEGAL_TAG, testUtils.getToken());
-		this.testUtils = null;
-	}
+  @Test
+  public void should_deleteRecordAndAllVersionsLogically_when_userIsAuthorized() {
+    HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(
+        withTestAcl(RecordUtil.createRecordsWithData(RECORD_ID, KIND, LEGAL_TAG, "v2")));
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
-	@Test
-	public void should_deleteRecordAndAllVersionsLogically_when_userIsAuthorized() throws Exception {
+    var versionsResponse = storageClient.getRecordVersions(RECORD_ID);
+    assertEquals(HttpStatus.SC_OK, versionsResponse.statusCode());
 
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-				RecordUtil.createJsonRecordWithData(RECORD_ID, KIND, LEGAL_TAG, "v2"), "");
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
+    RecordVersions content = versionsResponse.body();
+    String versionOne = content.versions()[0].toString();
+    String versionTwo = content.versions()[1].toString();
 
-		CloseableHttpResponse versionResponse = TestUtils.send("records/versions/" + RECORD_ID, "GET",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_OK, versionResponse.getCode());
+    HttpResponse<Void> deleteResponse = storageClient.softDeleteRecords(RECORD_ID + ":delete",
+        Map.of("anything", "anything"));
+    assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.statusCode());
 
-		String versions = TestUtils.getResult(versionResponse, HttpStatus.SC_OK, String.class);
-		JsonObject content = new JsonParser().parse(versions).getAsJsonObject();
-		JsonArray versionArray = content.get("versions").getAsJsonArray();
+    ClientException notFoundVersionOne = assertThrows(ClientException.class,
+        () -> storageClient.getRecordVersion(RECORD_ID, versionOne));
+    assertEquals(HttpStatus.SC_NOT_FOUND, notFoundVersionOne.getStatusCode());
 
-		String versionOne = versionArray.get(0).toString();
-		String versionTwo = versionArray.get(1).toString();
-
-		CloseableHttpResponse deleteResponse = TestUtils.send("records/", "POST", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-				"{'anything':'anything'}", RECORD_ID + ":delete");
-
-		assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.getCode());
-
-		response = TestUtils.send("records/" + RECORD_ID + "/" + versionOne, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-
-		response = TestUtils.send("records/" + RECORD_ID + "/" + versionTwo, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-	}
+    ClientException notFoundVersionTwo = assertThrows(ClientException.class,
+        () -> storageClient.getRecordVersion(RECORD_ID, versionTwo));
+    assertEquals(HttpStatus.SC_NOT_FOUND, notFoundVersionTwo.getStatusCode());
+  }
 }
