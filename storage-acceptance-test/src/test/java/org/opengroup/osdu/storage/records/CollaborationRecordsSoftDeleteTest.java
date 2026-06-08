@@ -17,121 +17,134 @@
 
 package org.opengroup.osdu.storage.records;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.opengroup.osdu.storage.util.HeaderUtils.getHeadersWithxCollaboration;
-import static org.opengroup.osdu.storage.util.TestUtils.assertRecordVersion;
-import static org.opengroup.osdu.storage.util.TestUtils.createRecordInCollaborationContext_AndReturnVersion;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
 
-import com.google.gson.JsonArray;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.util.Map;
 import java.util.UUID;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.ConfigUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class CollaborationRecordsSoftDeleteTest extends TestBase {
-    private static boolean isCollaborationEnabled = false;
-    private static final String APPLICATION_NAME = "storage service integration test for soft delete";
-    private static final String TENANT_NAME = TenantUtils.getTenantName();
-    private static final long CURRENT_TIME_MILLIS = System.currentTimeMillis();
-    private static final String COLLABORATION1_ID = UUID.randomUUID().toString();
-    private static final String COLLABORATION2_ID = UUID.randomUUID().toString();
-    private static final String RECORD_ID_1 = TENANT_NAME + ":inttest:1" + CURRENT_TIME_MILLIS;
-    private static final String RECORD_ID_2 = TENANT_NAME + ":inttest:2" + CURRENT_TIME_MILLIS;
-    private static final String RECORD_ID_3 = TENANT_NAME + ":inttest:3" + CURRENT_TIME_MILLIS;
-    private static final String KIND = TENANT_NAME + ":ds:inttest:" + CURRENT_TIME_MILLIS;
-    private static Long RECORD1_V1;
-    private static Long RECORD1_V2;
-    private static Long RECORD1_V3;
-    private static Long RECORD1_V4;
-    private static Long RECORD2_V1;
-    private static Long RECORD2_V2;
-    private static Long RECORD3_V1;
-    private static Long RECORD3_V2;
-    private static String LEGAL_TAG_NAME;
+public final class CollaborationRecordsSoftDeleteTest extends BaseRecordsAcceptanceTest {
 
-    @Override
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        this.configUtils = new ConfigUtils("test.properties");
+  private static final String APPLICATION_NAME =
+      "storage service integration test for soft delete";
 
-        if (configUtils != null && !configUtils.getIsCollaborationEnabled()) {
-            return;
-        }
-        isCollaborationEnabled = true;
-        LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
-        LegalTagUtils.create(LEGAL_TAG_NAME, testUtils.getToken());
+  private boolean isCollaborationEnabled;
+  private String collaboration1Id;
+  private String collaboration2Id;
+  private String recordId1;
+  private String recordId2;
+  private String recordId3;
+  private Long record1V3;
+  private Long record1V4;
+  private Long record2V2;
+  private Long record3V2;
 
-        RECORD1_V1 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND, LEGAL_TAG_NAME, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD1_V2 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND, LEGAL_TAG_NAME, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD1_V3 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND, LEGAL_TAG_NAME, null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD1_V4 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND, LEGAL_TAG_NAME,COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-
-        RECORD2_V1 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_2, KIND, LEGAL_TAG_NAME, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD2_V2 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_2, KIND, LEGAL_TAG_NAME, COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-
-        RECORD3_V1 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_3, KIND, LEGAL_TAG_NAME, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD3_V2 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_3, KIND, LEGAL_TAG_NAME, COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    if (!configUtils.getIsCollaborationEnabled()) {
+      isCollaborationEnabled = false;
+      return;
     }
+    isCollaborationEnabled = true;
+    long now = System.currentTimeMillis();
+    collaboration1Id = UUID.randomUUID().toString();
+    collaboration2Id = UUID.randomUUID().toString();
+    recordId1 = getTenantId() + ":inttest:1" + now;
+    recordId2 = getTenantId() + ":inttest:2" + now;
+    recordId3 = getTenantId() + ":inttest:3" + now;
+    String kind = getTenantId() + ":ds:inttest:" + now;
+    String legalTagName = createLegalTagName("");
+    createLegalTag(legalTagName);
 
-    @AfterEach
-    public void tearDown() throws Exception {
-        if (!isCollaborationEnabled) return;
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_2, "DELETE", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_2, "DELETE", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_3, "DELETE", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_3, "DELETE", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        LegalTagUtils.delete(LEGAL_TAG_NAME, testUtils.getToken());
+    createRecordInCollaborationAndReturnVersion(recordId1, kind, legalTagName, collaboration1Id,
+        APPLICATION_NAME);
+    createRecordInCollaborationAndReturnVersion(recordId1, kind, legalTagName, collaboration1Id,
+        APPLICATION_NAME);
+    record1V3 = createRecordInCollaborationAndReturnVersion(recordId1, kind, legalTagName, null,
+        APPLICATION_NAME);
+    record1V4 = createRecordInCollaborationAndReturnVersion(recordId1, kind, legalTagName,
+        collaboration2Id, APPLICATION_NAME);
 
-        this.testUtils = null;
-        this.configUtils = null;
+    createRecordInCollaborationAndReturnVersion(recordId2, kind, legalTagName, collaboration1Id,
+        APPLICATION_NAME);
+    record2V2 = createRecordInCollaborationAndReturnVersion(recordId2, kind, legalTagName,
+        collaboration2Id, APPLICATION_NAME);
+
+    createRecordInCollaborationAndReturnVersion(recordId3, kind, legalTagName, collaboration1Id,
+        APPLICATION_NAME);
+    record3V2 = createRecordInCollaborationAndReturnVersion(recordId3, kind, legalTagName,
+        collaboration2Id, APPLICATION_NAME);
+  }
+
+  @AfterEach
+  void cleanupCollaborationRecords() {
+    if (!isCollaborationEnabled) {
+      return;
     }
+    storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId1, collaborationHeaders(null, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId2, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId2, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId3, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId3, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+  }
 
-    @Test
-    public void should_softDeleteSingleRecordWithinCollaborationContext_when_validRecordIdsAndCollaborationIdAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        CloseableHttpResponse response = TestUtils.send("records/" + RECORD_ID_1 + ":delete", "POST", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getCode());
-
-        response = TestUtils.send("records/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-
-        response = TestUtils.send("records/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD1_V3);
-
-        response = TestUtils.send("records/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD1_V4);
+  @Test
+  public void should_softDeleteSingleRecordWithinCollaborationContext_when_validRecordIdsAndCollaborationIdAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
     }
+    HttpResponse<Void> deleteResponse = storageClient.softDeleteRecord(recordId1,
+        collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.statusCode());
 
-    @Test
-    public void should_bulkSoftDeleteWithinCollaborationContext_when_validRecordIdsAndCollaborationIdAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        JsonArray body = new JsonArray();
-        body.add(RECORD_ID_2);
-        body.add(RECORD_ID_3);
-        CloseableHttpResponse response = TestUtils.send("records/delete", "POST", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), body.toString(), "");
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getCode());
+    assertRecordNotFound(recordId1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
 
-        response = TestUtils.send("records/" + RECORD_ID_2, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
+    HttpResponse<StorageRecord> response = storageClient.getRecord(recordId1,
+        collaborationHeaders(null, APPLICATION_NAME));
+    assertRecordVersion(response, record1V3);
 
-        response = TestUtils.send("records/" + RECORD_ID_3, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
+    response = storageClient.getRecord(recordId1,
+        collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    assertRecordVersion(response, record1V4);
+  }
 
-        response = TestUtils.send("records/" + RECORD_ID_2, "GET", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD2_V2);
-
-        response = TestUtils.send("records/" + RECORD_ID_3, "GET", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD3_V2);
+  @Test
+  public void should_bulkSoftDeleteWithinCollaborationContext_when_validRecordIdsAndCollaborationIdAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
     }
+    var deleteResponse = storageClient.batchDeleteRecords("",
+        new String[] {recordId2, recordId3},
+        collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.statusCode());
+
+    assertRecordNotFound(recordId2, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertRecordNotFound(recordId3, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+
+    HttpResponse<StorageRecord> response = storageClient.getRecord(recordId2,
+        collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    assertRecordVersion(response, record2V2);
+
+    response = storageClient.getRecord(recordId3,
+        collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    assertRecordVersion(response, record3V2);
+  }
+
+  private void assertRecordNotFound(String recordId, Map<String, String> headers) {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.getRecord(recordId, headers));
+    assertEquals(HttpStatus.SC_NOT_FOUND, ex.getStatusCode());
+  }
 }

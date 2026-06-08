@@ -16,183 +16,139 @@
 
 package org.opengroup.osdu.storage.records;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.ConfigUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+import org.opengroup.osdu.core.test.client.model.storage.RecordsListResponse;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.apache.hc.core5.http.HttpStatus;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.opengroup.osdu.storage.util.HeaderUtils.getHeaders;
-import static org.opengroup.osdu.storage.util.TestUtils.createRecordWithoutCollaborationContext_AndReturnVersion;
+import static org.junit.jupiter.api.Assertions.*;
 
-@Slf4j
-public class GetAllRecordsTest extends TestBase {
-    private static String LEGAL_TAG_NAME;
-    private static final String TENANT_NAME = TenantUtils.getTenantName();
-    private static final String TIMESTAMP = String.valueOf(System.currentTimeMillis());
-    private static final String RECORD_ID_1 = TENANT_NAME + ":readAllRecords:1" + TIMESTAMP;
-    private static final String RECORD_ID_2 = TENANT_NAME + ":readAllRecords:2" + TIMESTAMP;
-    private static final String RECORD_ID_3 = TENANT_NAME + ":readAllRecords:3" + TIMESTAMP;
-    private static final String KIND = TENANT_NAME + ":ds:readAllRecords:" + TIMESTAMP;
-    private List<String> generatedRecordsList = null;
-    private List<String> softDeletedRecordsList = null;
+public class GetAllRecordsTest extends BaseRecordsAcceptanceTest {
 
-    @BeforeEach
-    @Override
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        this.configUtils = new ConfigUtils("test.properties");
-        generatedRecordsList = new ArrayList<>();
-        softDeletedRecordsList = new ArrayList<>();
+  private String recordId1;
+  private String recordId2;
+  private String recordId3;
+  private String kind;
+  private List<String> generatedRecordsList;
+  private List<String> softDeletedRecordsList;
 
-        LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
-        LegalTagUtils.create(LEGAL_TAG_NAME, testUtils.getToken());
-        createRecordWithoutCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND, LEGAL_TAG_NAME, TENANT_NAME, testUtils.getToken());
-        createRecordWithoutCollaborationContext_AndReturnVersion(RECORD_ID_2, KIND, LEGAL_TAG_NAME, TENANT_NAME, testUtils.getToken());
-        createRecordWithoutCollaborationContext_AndReturnVersion(RECORD_ID_3, KIND, LEGAL_TAG_NAME, TENANT_NAME, testUtils.getToken());
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    String timestamp = String.valueOf(System.currentTimeMillis());
+    recordId1 = getTenantId() + ":readAllRecords:1" + timestamp;
+    recordId2 = getTenantId() + ":readAllRecords:2" + timestamp;
+    recordId3 = getTenantId() + ":readAllRecords:3" + timestamp;
+    kind = getTenantId() + ":ds:readAllRecords:" + timestamp;
+    generatedRecordsList = new ArrayList<>();
+    softDeletedRecordsList = new ArrayList<>();
 
-        generatedRecordsList.add(RECORD_ID_1);
-        generatedRecordsList.add(RECORD_ID_3);
-        generatedRecordsList.add(RECORD_ID_2);
+    String legalTagName = createLegalTagName("");
+    createLegalTag(legalTagName);
+    createRecordAndReturnVersion(recordId1, kind, legalTagName);
+    createRecordAndReturnVersion(recordId2, kind, legalTagName);
+    createRecordAndReturnVersion(recordId3, kind, legalTagName);
+
+    generatedRecordsList.add(recordId1);
+    generatedRecordsList.add(recordId3);
+    generatedRecordsList.add(recordId2);
+  }
+
+  private void softDeleteRecord(String recordId) {
+    HttpResponse<Void> response = storageClient.softDeleteRecord(recordId);
+    assertEquals(HttpStatus.SC_NO_CONTENT, response.statusCode());
+  }
+
+  @Test
+  public void should_fetchAllRecords() {
+    var response = storageClient.getRecords("?kind=" + kind);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    RecordsListResponse responseJson = response.body();
+    verifyGetAllActiveRecordsSuccessResponse(responseJson);
+  }
+
+  @Test
+  public void should_fetchOnlyActiveRecordsWhenNoDeleteFilterSpecified() {
+    softDeleteRecord(recordId2);
+    softDeletedRecordsList.add(recordId2);
+
+    var response = storageClient.getRecords("?kind=" + kind);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    RecordsListResponse responseJson = response.body();
+    verifyGetAllActiveRecordsSuccessResponse(responseJson);
+  }
+
+  @Test
+  public void should_fetchSoftDeletedRecordsWhenFilterSpecified() {
+    softDeleteRecord(recordId2);
+    softDeletedRecordsList.add(recordId2);
+
+    var response = storageClient.getRecords("?deleted=true&kind=" + kind);
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+    RecordsListResponse responseJson = response.body();
+
+    assertEquals(softDeletedRecordsList.size(), responseJson.results().length,
+        "Results array should contain exactly one object");
+
+    StorageRecord inactiveRecord = responseJson.results()[0];
+    assertEquals(recordId2, inactiveRecord.id());
+  }
+
+  @Test
+  public void should_returnUnauthorized_whenTokenNotProvided() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.listRecords("", Map.of("Authorization", "")));
+    assertEquals(HttpStatus.SC_UNAUTHORIZED, ex.getStatusCode());
+  }
+
+  @Test
+  public void should_returnBadRequest_whenDataPartitionHeaderMissing() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.listRecords("?kind=" + kind, Map.of("data-partition-id", "")));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
+
+  @Test
+  public void should_returnBadRequest_when_limitExceedsMaximum() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.getRecords("?limit=101&kind=" + kind));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
+
+  @Test
+  public void should_returnBadRequest_when_limitIsZero() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.getRecords("?limit=0&kind=" + kind));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
+
+  @Test
+  public void should_returnBadRequest_when_invalidKindParamPassed() {
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.getRecords("?kind=invalid-kind-format"));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+  }
+
+  private void verifyGetAllActiveRecordsSuccessResponse(RecordsListResponse responseJson) {
+    assertNotNull(responseJson.results(), "Response should contain 'results' field");
+    assertEquals(generatedRecordsList.size() - softDeletedRecordsList.size(),
+        responseJson.results().length,
+        "Results array should contain all active records.");
+
+    StorageRecord record = responseJson.results()[0];
+    String recordId = record.id();
+    if (!(recordId1.equalsIgnoreCase(recordId) || recordId2.equalsIgnoreCase(recordId)
+        || recordId3.equalsIgnoreCase(recordId))) {
+      fail("Results array should contain one of the generated Records");
     }
-
-    @AfterEach
-    @Override
-    public void tearDown() throws Exception {
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_2, "DELETE", getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_3, "DELETE", getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-
-        LegalTagUtils.delete(LEGAL_TAG_NAME, testUtils.getToken());
-
-        this.testUtils = null;
-        this.configUtils = null;
-        generatedRecordsList = null;
-        softDeletedRecordsList = null;
-    }
-
-    private void softDeleteRecord(String recordId, String tenantName, String token) throws Exception {
-        CloseableHttpResponse response = TestUtils.send("records/" + recordId + ":delete", "POST", getHeaders(tenantName, token), "", "");
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getCode());
-    }
-
-    @Test
-    public void should_fetchAllRecords() throws Exception {
-        //get all records
-        CloseableHttpResponse getAllRecordsResponse = TestUtils.send("records", "GET",
-                getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?kind=" + KIND);
-        assertEquals(HttpStatus.SC_OK, getAllRecordsResponse.getCode());
-
-        String responseBody = EntityUtils.toString(getAllRecordsResponse.getEntity());
-        JsonObject responseJson = JsonParser.parseString(responseBody).getAsJsonObject();
-        verifyGetAllActiveRecordsSuccessResponse(responseJson);
-    }
-
-    @Test
-    public void should_fetchOnlyActiveRecordsWhenNoDeleteFilterSpecified() throws Exception {
-        softDeleteRecord(RECORD_ID_2, TENANT_NAME, testUtils.getToken());
-        softDeletedRecordsList.add(RECORD_ID_2);
-
-        //get all records
-        CloseableHttpResponse getAllRecordsResponse = TestUtils.send("records", "GET",
-                getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?kind=" + KIND);
-        assertEquals(HttpStatus.SC_OK, getAllRecordsResponse.getCode());
-
-        String responseBody = EntityUtils.toString(getAllRecordsResponse.getEntity());
-        JsonObject responseJson = JsonParser.parseString(responseBody).getAsJsonObject();
-        verifyGetAllActiveRecordsSuccessResponse(responseJson);
-    }
-
-    @Test
-    public void should_fetchSoftDeletedRecordsWhenFilterSpecified() throws Exception {
-        softDeleteRecord(RECORD_ID_2, TENANT_NAME, testUtils.getToken());
-        softDeletedRecordsList.add(RECORD_ID_2);
-
-        //get all records
-        CloseableHttpResponse getAllRecordsResponse = TestUtils.send("records", "GET",
-                getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?deleted=true&kind=" + KIND);
-        assertEquals(HttpStatus.SC_OK, getAllRecordsResponse.getCode());
-
-        String responseBody = EntityUtils.toString(getAllRecordsResponse.getEntity());
-        JsonObject responseJson = JsonParser.parseString(responseBody).getAsJsonObject();
-
-        // Assert that the response has a "results" array with required objects
-        assertTrue(responseJson.has("results"), "Response should contain 'results' field");
-        JsonArray resultsArray = responseJson.getAsJsonArray("results");
-        assertEquals(softDeletedRecordsList.size(), resultsArray.size(), "Results array should contain exactly one object");
-
-        JsonObject inactiveRecord = resultsArray.get(0).getAsJsonObject();
-        assertEquals(RECORD_ID_2, inactiveRecord.get("id").getAsString());
-    }
-
-    @Test
-    public void should_returnUnauthorized_whenTokenNotProvided() throws Exception {
-        CloseableHttpResponse getRecordsResponse = TestUtils.send("records/", "GET",
-                getHeaders(TENANT_NAME, null), "", "");
-        assertEquals(HttpStatus.SC_UNAUTHORIZED, getRecordsResponse.getCode());
-    }
-
-    @Test
-    public void should_returnBadRequest_whenDataPartitionHeaderMissing() throws Exception {
-        Map<String, String> headers = getHeaders(TENANT_NAME, testUtils.getToken());
-        headers.remove("Data-Partition-Id");
-
-        CloseableHttpResponse getRecordsResponse = TestUtils.send("records/", "GET",
-                headers, "", "?kind=" + KIND);
-
-        assertEquals(HttpStatus.SC_BAD_REQUEST, getRecordsResponse.getCode());
-    }
-
-    @Test
-    public void should_returnBadRequest_when_limitExceedsMaximum() throws Exception {
-        CloseableHttpResponse response = TestUtils.send("records", "GET",
-                getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=101&kind=" + KIND);
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-    }
-
-    @Test
-    public void should_returnBadRequest_when_limitIsZero() throws Exception {
-        CloseableHttpResponse response = TestUtils.send("records", "GET",
-                getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=0&kind=" + KIND);
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-    }
-
-    @Test
-    public void should_returnBadRequest_when_invalidKindParamPassed() throws Exception {
-        CloseableHttpResponse response = TestUtils.send("records", "GET",
-                getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?kind=invalid-kind-format");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, response.getCode());
-    }
-
-    private void verifyGetAllActiveRecordsSuccessResponse(JsonObject responseJson) {
-        // Assert that the response has a "results" array with required objects
-        assertTrue(responseJson.has("results"), "Response should contain 'results' field");
-        JsonArray resultsArray = responseJson.getAsJsonArray("results");
-        assertEquals(generatedRecordsList.size() - softDeletedRecordsList.size(), resultsArray.size(), "Results array should contain all active records.");
-
-        JsonObject record = resultsArray.get(0).getAsJsonObject();
-        String recordId = record.get("id").getAsString();
-        if (!(RECORD_ID_1.equalsIgnoreCase(recordId) || RECORD_ID_2.equalsIgnoreCase(recordId) || RECORD_ID_3.equalsIgnoreCase(recordId))) {
-            Assertions.fail("Results array should contain one of the generated Records");
-        }
-        assertEquals(KIND, record.get("kind").getAsString());
-    }
+    assertEquals(kind, record.kind());
+  }
 }

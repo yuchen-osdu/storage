@@ -16,222 +16,165 @@
 
 package org.opengroup.osdu.storage.records;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.ClientException;
+
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.util.Map;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.ConfigUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-import java.util.Map;
+@DisplayName("Patch StorageRecord API Tests")
+public class PatchRecordTest extends BaseRecordsAcceptanceTest {
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.opengroup.osdu.storage.util.HeaderUtils.getHeaders;
-import static org.opengroup.osdu.storage.util.TestUtils.createRecordWithoutCollaborationContext_AndReturnVersion;
+  private static final String MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json";
 
-@Slf4j
-@DisplayName("Patch Record API Tests")
-public class PatchRecordTest extends TestBase {
-
-    // Constants for better performance and maintainability
-    private static final String TENANT_NAME = TenantUtils.getTenantName();
-    private static final String TIMESTAMP = String.valueOf(System.currentTimeMillis());
-    private static final String RECORD_ID = TENANT_NAME + ":patchRecord:test" + TIMESTAMP;
-    private static final String KIND = TENANT_NAME + ":ds:patchRecord:" + TIMESTAMP;
-    private static final String MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json";
-
-    // Patch body constants for reusability and performance
-    private static final String DATA_PATCH_BODY = """
-        {
-          "data": {
-            "wellName": "Updated Well Name",
-            "status": "active",
-            "newField": "newValue"
-          }
-        }""";
-
-    private static final String TAGS_PATCH_BODY = """
-        {
-          "tags": {
-            "environment": "production",
-            "project": "test-project"
-          }
-        }""";
-
-    private static final String SOFT_DELETE_PATCH = "{\"deleted\":true}";
-    private static final String RECOVERY_PATCH = "{\"deleted\":false}";
-    private static final String INVALID_JSON_PATCH = "{\"data\":{\"field\":}"; // Missing value
-
-    private String legalTagName;
-
-    @BeforeEach
-    @Override
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        this.configUtils = new ConfigUtils("test.properties");
-
-        legalTagName = LegalTagUtils.createRandomName();
-        LegalTagUtils.create(legalTagName, testUtils.getToken());
-        createRecordWithoutCollaborationContext_AndReturnVersion(
-                RECORD_ID, KIND, legalTagName, TENANT_NAME, testUtils.getToken());
-    }
-
-    @AfterEach
-    @Override
-    public void tearDown() throws Exception {
-        try {
-            TestUtils.send("records/" + RECORD_ID, "DELETE",
-                    getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-        } catch (Exception e) {
-            log.warn("Failed to delete test record: {}", RECORD_ID, e);
+  private static final String DATA_PATCH_BODY = """
+      {
+        "data": {
+          "wellName": "Updated Well Name",
+          "status": "active",
+          "newField": "newValue"
         }
+      }""";
 
-        try {
-            LegalTagUtils.delete(legalTagName, testUtils.getToken());
-        } catch (Exception e) {
-            log.warn("Failed to delete legal tag: {}", legalTagName, e);
+  private static final String TAGS_PATCH_BODY = """
+      {
+        "tags": {
+          "environment": "production",
+          "project": "test-project"
         }
+      }""";
 
-        this.testUtils = null;
-        this.configUtils = null;
-    }
+  private static final String SOFT_DELETE_PATCH = "{\"deleted\":true}";
+  private static final String RECOVERY_PATCH = "{\"deleted\":false}";
+  private static final String INVALID_JSON_PATCH = "{\"data\":{\"field\":}";
 
-    @Test
-    public void should_patchRecordData_successfully() throws Exception {
-        // Patch the record
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY, "");
+  private String recordId;
 
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    String timestamp = String.valueOf(System.currentTimeMillis());
+    recordId = getTenantId() + ":patchRecord:test" + timestamp;
+    String kind = getTenantId() + ":ds:patchRecord:" + timestamp;
+    String legalTagName = createLegalTagName("");
+    createLegalTag(legalTagName);
+    createRecordAndReturnVersion(recordId, kind, legalTagName);
+  }
 
-        String responseBody = EntityUtils.toString(patchResponse.getEntity());
-        JsonObject responseJson = JsonParser.parseString(responseBody).getAsJsonObject();
+  @Test
+  public void should_patchRecordData_successfully() {
+    HttpResponse<StorageRecord> patchResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY);
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
 
-        validatePatchResponse(responseJson);
-        validateDataFields(responseJson);
-    }
+    StorageRecord responseJson = patchResponse.body();
+    validatePatchResponse(responseJson);
+    validateDataFields(responseJson);
+  }
 
-    @Test
-    public void should_patchRecordTags_successfully() throws Exception {
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, TAGS_PATCH_BODY, "");
+  @Test
+  public void should_patchRecordTags_successfully() {
+    HttpResponse<StorageRecord> patchResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, TAGS_PATCH_BODY);
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
 
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
+    StorageRecord responseJson = patchResponse.body();
+    assertNotNull(responseJson.tags(), "Response should contain 'tags' field");
+    assertEquals("production", responseJson.tags().get("environment"));
+    assertEquals("test-project", responseJson.tags().get("project"));
+  }
 
-        String responseBody = EntityUtils.toString(patchResponse.getEntity());
-        JsonObject responseJson = JsonParser.parseString(responseBody).getAsJsonObject();
+  @Test
+  public void should_softDeleteRecord_successfully() {
+    HttpResponse<StorageRecord> patchResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, SOFT_DELETE_PATCH);
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
 
-        assertTrue(responseJson.has("tags"), "Response should contain 'tags' field");
-        JsonObject tags = responseJson.getAsJsonObject("tags");
-        assertEquals("production", tags.get("environment").getAsString());
-        assertEquals("test-project", tags.get("project").getAsString());
-    }
+    assertRecordNotFound(recordId);
+  }
 
-    @Test
-    public void should_softDeleteRecord_successfully() throws Exception {
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, SOFT_DELETE_PATCH, "");
+  @Test
+  public void should_softDeleteAndRecover_successfully() {
+    HttpResponse<StorageRecord> deleteResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, SOFT_DELETE_PATCH);
+    assertEquals(HttpStatus.SC_OK, deleteResponse.statusCode());
 
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
+    assertRecordNotFound(recordId);
 
-        // Verify soft deletion - record should not be accessible via normal GET
-        CloseableHttpResponse getRecordResponse = TestUtils.send("records/" + RECORD_ID, "GET",
-                getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, getRecordResponse.getCode());
-    }
+    HttpResponse<StorageRecord> recoverResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, RECOVERY_PATCH);
+    assertEquals(HttpStatus.SC_OK, recoverResponse.statusCode());
 
-    @Test
-    public void should_softDeleteAndRecover_successfully() throws Exception {
-        // Soft delete
-        CloseableHttpResponse deleteResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, SOFT_DELETE_PATCH, "");
-        assertEquals(HttpStatus.SC_OK, deleteResponse.getCode());
+    HttpResponse<StorageRecord> getRecoveredResponse = storageClient.getRecord(recordId);
+    assertEquals(HttpStatus.SC_OK, getRecoveredResponse.statusCode());
+  }
 
-        // Verify deletion
-        CloseableHttpResponse getDeletedResponse = TestUtils.send("records/" + RECORD_ID, "GET",
-                getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, getDeletedResponse.getCode());
+  @Test
+  public void should_FailOnPatchingSoftDeletedRecord() {
+    HttpResponse<StorageRecord> deleteResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, SOFT_DELETE_PATCH);
+    assertEquals(HttpStatus.SC_OK, deleteResponse.statusCode());
 
-        // Recover record
-        CloseableHttpResponse recoverResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, RECOVERY_PATCH, "");
-        assertEquals(HttpStatus.SC_OK, recoverResponse.getCode());
+    ClientException patchError = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, TAGS_PATCH_BODY));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, patchError.getStatusCode());
+  }
 
-        // Verify recovery
-        CloseableHttpResponse getRecoveredResponse = TestUtils.send("records/" + RECORD_ID, "GET",
-                getHeaders(TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_OK, getRecoveredResponse.getCode());
-    }
+  @Test
+  public void should_returnBadRequest_whenRecordIdInvalid() {
+    String invalidRecordId = "invalid-record-id-format";
+    ClientException patchError = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(invalidRecordId, MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, patchError.getStatusCode());
+  }
 
-    @Test
-    public void should_FailOnPatchingSoftDeletedRecord() throws Exception {
-        // Soft delete
-        CloseableHttpResponse deleteResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, SOFT_DELETE_PATCH, "");
-        assertEquals(HttpStatus.SC_OK, deleteResponse.getCode());
+  @Test
+  public void should_returnNotFound_whenRecordDoesNotExist() {
+    String nonExistentRecordId = getTenantId() + ":nonExistent:record"
+        + System.currentTimeMillis();
+    ClientException patchError = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(nonExistentRecordId, MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY));
+    assertEquals(HttpStatus.SC_NOT_FOUND, patchError.getStatusCode());
+  }
 
-        // try to patch Tags, should return bad request
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, TAGS_PATCH_BODY, "");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, patchResponse.getCode());
-    }
+  @Test
+  public void should_returnUnauthorized_whenTokenNotProvided() {
+    ClientException patchError = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(recordId, DATA_PATCH_BODY,
+            Map.of("Content-Type", MERGE_PATCH_CONTENT_TYPE, "Authorization", "")));
+    assertEquals(HttpStatus.SC_UNAUTHORIZED, patchError.getStatusCode());
+  }
 
-    @Test
-    public void should_returnBadRequest_whenRecordIdInvalid() throws Exception {
-        String invalidRecordId = "invalid-record-id-format";
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + invalidRecordId, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY, "");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, patchResponse.getCode());
-    }
+  @Test
+  public void should_returnBadRequest_whenPatchBodyInvalid() {
+    ClientException patchError = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, INVALID_JSON_PATCH));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, patchError.getStatusCode());
+  }
 
-    @Test
-    public void should_returnNotFound_whenRecordDoesNotExist() throws Exception {
-        String nonExistentRecordId = TENANT_NAME + ":nonExistent:record" + TIMESTAMP;
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + nonExistentRecordId, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY, "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, patchResponse.getCode());
-    }
+  private void assertRecordNotFound(String id) {
+    ClientException notFound = assertThrows(ClientException.class,
+        () -> storageClient.getRecord(id));
+    assertEquals(HttpStatus.SC_NOT_FOUND, notFound.getStatusCode());
+  }
 
-    @Test
-    public void should_returnUnauthorized_whenTokenNotProvided() throws Exception {
-        Map<String, String> headersWithoutToken = getHeaders(TENANT_NAME, null);
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                headersWithoutToken, MERGE_PATCH_CONTENT_TYPE, DATA_PATCH_BODY, "");
-        assertEquals(HttpStatus.SC_UNAUTHORIZED, patchResponse.getCode());
-    }
+  private void validatePatchResponse(StorageRecord responseJson) {
+    assertNotNull(responseJson, "Response should not be null");
+    assertNotNull(responseJson.id(), "Response should contain 'id' field");
+    assertNotNull(responseJson.version(), "Response should contain 'version' field");
+    assertNotNull(responseJson.data(), "Response should contain 'data' field");
+    assertEquals(recordId, responseJson.id(), "StorageRecord ID should match");
+  }
 
-    @Test
-    public void should_returnBadRequest_whenPatchBodyInvalid() throws Exception {
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + RECORD_ID, "PATCH",
-                getHeaders(TENANT_NAME, testUtils.getToken()), MERGE_PATCH_CONTENT_TYPE, INVALID_JSON_PATCH, "");
-        assertEquals(HttpStatus.SC_BAD_REQUEST, patchResponse.getCode());
-    }
-
-    // Helper methods for comprehensive validation
-    private void validatePatchResponse(JsonObject responseJson) {
-        assertNotNull(responseJson, "Response should not be null");
-        assertTrue(responseJson.has("id"), "Response should contain 'id' field");
-        assertTrue(responseJson.has("version"), "Response should contain 'version' field");
-        assertTrue(responseJson.has("data"), "Response should contain 'data' field");
-
-        assertEquals(RECORD_ID, responseJson.get("id").getAsString(), "Record ID should match");}
-
-    private void validateDataFields(JsonObject responseJson) {
-        JsonObject data = responseJson.getAsJsonObject("data");
-        assertNotNull(data, "Data field should not be null");
-
-        assertEquals("Updated Well Name", data.get("wellName").getAsString());
-        assertEquals("active", data.get("status").getAsString());
-        assertEquals("newValue", data.get("newField").getAsString());
-    }
+  private void validateDataFields(StorageRecord responseJson) {
+    Map<String, Object> data = responseJson.data();
+    assertNotNull(data, "Data field should not be null");
+    assertEquals("Updated Well Name", data.get("wellName"));
+    assertEquals("active", data.get("status"));
+    assertEquals("newValue", data.get("newField"));
+  }
 }

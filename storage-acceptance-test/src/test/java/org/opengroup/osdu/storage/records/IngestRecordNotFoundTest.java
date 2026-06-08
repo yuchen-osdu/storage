@@ -15,77 +15,44 @@
 package org.opengroup.osdu.storage.records;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
 import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class IngestRecordNotFoundTest extends TestBase {
+public final class IngestRecordNotFoundTest extends BaseRecordsAcceptanceTest {
 
-	private static final long NOW = System.currentTimeMillis();
-	private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
+  private String LEGAL_TAG;
+  private String KIND;
+  private String RECORD_ID;
 
-	private static final String KIND = TenantUtils.getTenantName() + ":test:endtoend:1.1." + NOW;
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":endtoend:1.1." + NOW;
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    LEGAL_TAG = getTenantId() + "-storage-" + now;
+    KIND = getTenantId() + ":test:endtoend:1.1." + now;
+    RECORD_ID = getTenantId() + ":endtoend:1.1." + now;
+    createLegalTag(LEGAL_TAG);
+  }
 
-	public static void classSetup(String token) throws Exception {
-		LegalTagUtils.create(LEGAL_TAG, token);
-	}
+  @Test
+  public void should_returnBadRequest_when_userGroupDoesNotExist() {
+    String group = String.format("data.thisDataGrpDoesNotExsist@%s", getAclSuffix());
+    StorageRecord[] records = withTestAcl(RecordUtil.replaceAcl(
+        RecordUtil.createDefaultRecords(RECORD_ID, KIND, LEGAL_TAG),
+        TestUtils.getAcl(), group));
 
-	public static void classTearDown(String token) throws Exception {
-		LegalTagUtils.delete(LEGAL_TAG, token);
-	}
-
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
-
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		IngestRecordNotFoundTest.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
-
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		IngestRecordNotFoundTest.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
-
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
-
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
-
-	@Test
-	public void should_returnBadRequest_when_userGroupDoesNotExist() throws Exception {
-
-		String group = String.format("data.thisDataGrpDoesNotExsist@%s", TestUtils.getAclSuffix());
-
-		String record = RecordUtil.createDefaultJsonRecord(RECORD_ID, KIND, LEGAL_TAG).replace(TestUtils.getAcl(), group);
-
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), record, "");
-
-		String result = TestUtils.getResult(response, HttpStatus.SC_BAD_REQUEST, String.class);
-		JsonObject jsonResponse = JsonParser.parseString(result).getAsJsonObject();
-		assertEquals("Error on writing record", jsonResponse.get("reason").getAsString());
-		assertEquals("Could not find group \"" + group + "\".",
-				jsonResponse.get("message").getAsString());
-	}
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.putRecords(records));
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Error on writing record", ex.getError().getReason());
+    assertEquals("Could not find group \"" + group + "\".", ex.getError().getMessage());
+  }
 }

@@ -14,138 +14,71 @@
 
 package org.opengroup.osdu.storage.records;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.google.common.collect.Lists;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import java.util.List;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import java.util.Map;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+import org.opengroup.osdu.core.test.client.model.storage.RecordAcl;
+import org.opengroup.osdu.core.test.client.model.storage.RecordLegal;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper.CreateRecordResponse;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class LogicalRecordDeleteTests extends TestBase {
+public final class LogicalRecordDeleteTests extends BaseRecordsAcceptanceTest {
 
-	private static final long NOW = System.currentTimeMillis();
-	private static final String KIND = TenantUtils.getTenantName() + ":delete:inttest:1.0." + NOW;
-	private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":inttest:" + NOW;
+  private String KIND;
+  private String RECORD_ID;
 
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    String LEGAL_TAG = getTenantId() + "-storage-" + now;
+    KIND = getTenantId() + ":delete:inttest:1.0." + now;
+    RECORD_ID = getTenantId() + ":inttest:" + now;
 
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		LogicalRecordDeleteTests.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
+    createLegalTag(LEGAL_TAG);
+    var createResponse = storageClient.putRecords(createRecords(RECORD_ID, "anything", Lists.newArrayList(
+            LEGAL_TAG),
+            Lists.newArrayList("BR", "IT")));
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+    CreateRecordsResponse result = createResponse.body();
+    assertEquals(1, result.recordCount());
+    assertEquals(1, result.recordIds().length);
+    assertEquals(1, result.recordIdVersions().length);
+    assertEquals(RECORD_ID, result.recordIds()[0]);
+  }
 
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		LogicalRecordDeleteTests.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
+  @Test
+  public void should_notRetrieveRecord_and_notDeleteRecordAgain_when_deletingItLogically() {
+    HttpResponse<Void> deleteResponse = storageClient.softDeleteRecord(RECORD_ID,
+        "{'anything':'teste'}", null);
+    assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.statusCode());
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+    ClientException notFoundOnGet = assertThrows(ClientException.class,
+        () -> storageClient.getRecord(RECORD_ID));
+    assertEquals(HttpStatus.SC_NOT_FOUND, notFoundOnGet.getStatusCode());
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+    ClientException notFoundOnDelete = assertThrows(ClientException.class,
+        () -> storageClient.softDeleteRecord(RECORD_ID, "{'anything':'teste'}", null));
+    assertEquals(HttpStatus.SC_NOT_FOUND, notFoundOnDelete.getStatusCode());
+  }
 
-	public static void classSetup(String token) throws Exception {
-		LegalTagUtils.create(LEGAL_TAG, token);
-
-		String body = createBody(RECORD_ID, "anything", Lists.newArrayList(LEGAL_TAG), Lists.newArrayList("BR", "IT"));
-
-		CloseableHttpResponse response = TestUtils.send("records", "PUT",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), body, "");
-
-		String responseBody = EntityUtils.toString(response.getEntity());
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-		assertTrue(response.getEntity().getContentType().contains("application/json"));
-
-		Gson gson = new Gson();
-		CreateRecordResponse result = gson.fromJson(responseBody, CreateRecordResponse.class);
-
-		assertEquals(1, result.recordCount);
-		assertEquals(1, result.recordIds.length);
-		assertEquals(1, result.recordIdVersions.length);
-		assertEquals(RECORD_ID, result.recordIds[0]);
-	}
-
-	public static void classTearDown(String token) throws Exception {
-		TestUtils.send("records/" + RECORD_ID, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-
-		LegalTagUtils.delete(LEGAL_TAG, token);
-	}
-
-	@Test
-	public void should_notRetrieveRecord_and_notDeleteRecordAgain_when_deletingItLogically() throws Exception {
-		String queryParam = String.format("records/%s:delete", RECORD_ID);
-
-		// deleting
-		CloseableHttpResponse response = TestUtils.send(queryParam, "POST",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "{'anything':'teste'}", "");
-		assertEquals(HttpStatus.SC_NO_CONTENT, response.getCode());
-
-		// trying to get
-		response = TestUtils.send("records/" + RECORD_ID, "GET",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-
-		// trying to delete again
-		response = TestUtils.send(queryParam, "POST",
-				HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "{'anything':'teste'}", "");
-		assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-	}
-
-	protected static String createBody(String id, String dataValue, List<String> legalTags, List<String> ordc) {
-		JsonObject data = new JsonObject();
-		data.addProperty("name", dataValue);
-
-		JsonObject acl = new JsonObject();
-		JsonArray acls = new JsonArray();
-		acls.add(TestUtils.getAcl());
-		acl.add("viewers", acls);
-		acl.add("owners", acls);
-
-		JsonArray tags = new JsonArray();
-		legalTags.forEach(t -> tags.add(t));
-
-		JsonArray ordcJson = new JsonArray();
-		ordc.forEach(o -> ordcJson.add(o));
-
-		JsonObject legal = new JsonObject();
-		legal.add("legaltags", tags);
-		legal.add("otherRelevantDataCountries", ordcJson);
-
-		JsonObject record = new JsonObject();
-		record.addProperty("id", id);
-		record.addProperty("kind", KIND);
-		record.add("acl", acl);
-		record.add("legal", legal);
-		record.add("data", data);
-
-		JsonArray records = new JsonArray();
-		records.add(record);
-
-		return records.toString();
-	}
+  private StorageRecord[] createRecords(String id, String dataValue, List<String> legalTags,
+      List<String> ordc) {
+    RecordAcl acl = new RecordAcl(new String[] {getAcl()}, new String[] {getAcl()});
+    RecordLegal legal = new RecordLegal(
+        legalTags.toArray(String[]::new), ordc.toArray(String[]::new));
+    StorageRecord record = new StorageRecord(id, null, KIND, acl, Map.of("name", dataValue), legal, null, null,
+        null, null, null, null, null);
+    return new StorageRecord[] {record};
+  }
 }

@@ -14,113 +14,31 @@
 
 package org.opengroup.osdu.storage.util;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import java.io.IOException;
 import java.util.List;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.ProtocolException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.opengroup.osdu.storage.model.ReplayStatusResponseHelper;
+import org.opengroup.osdu.core.test.client.model.replay.InvalidReplayRequest;
+import org.opengroup.osdu.core.test.client.model.replay.ReplayFilter;
+import org.opengroup.osdu.core.test.client.model.replay.ReplayRequest;
+import org.opengroup.osdu.storage.model.search.SearchCountRequest;
+
 public class ReplayUtils {
 
-    public static String createJsonEmpty() {
+  public static ReplayRequest emptyReplayRequest() {
+    return new ReplayRequest(null, null);
+  }
 
-        JsonObject requestBody = new JsonObject();
-        return requestBody.toString();
-    }
+  public static ReplayRequest replayRequest(String operation) {
+    return new ReplayRequest(operation, null);
+  }
 
-    public static String createJsonWithoutOperationName(List<String> kindList) {
+  public static ReplayRequest replayRequest(String operation, List<String> kindList) {
+    return new ReplayRequest(operation, new ReplayFilter(kindList.toArray(String[]::new)));
+  }
 
-        JsonObject requestBody = new JsonObject();
-        JsonObject filter = new JsonObject();
-        requestBody.add("filter", filter);
-        JsonArray kindArray = new JsonArray();
-        filter.add("kinds", kindArray);
-        for (String kind : kindList)
-            kindArray.add(kind);
-        return requestBody.toString();
-    }
+  public static InvalidReplayRequest replayRequestWithUnknownProperty() {
+    return new InvalidReplayRequest("reindex", List.of());
+  }
 
-
-    public static String createJsonWithOperationName(String operation) {
-
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("operation", operation);
-        return requestBody.toString();
-    }
-
-    public static String createJsonWithEmptyFilter(String operation) {
-
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("operation", operation);
-        JsonObject filter = new JsonObject();
-        requestBody.add("filter", filter);
-        return requestBody.toString();
-    }
-
-    public static String createJsonWithKind(String operation, List<String> kindList) {
-
-        JsonObject requestBody = new JsonObject();
-        JsonObject filter = new JsonObject();
-        JsonArray kindArray = new JsonArray();
-        requestBody.addProperty("operation", operation);
-        requestBody.add("filter", filter);
-        filter.add("kinds", kindArray);
-        for (String kind : kindList)
-            kindArray.add(kind);
-        return requestBody.toString();
-    }
-
-    public static String createJsonWithUnknownProperty(){
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("operation", "reindex");
-        requestBody.add("notValidFilter", new JsonArray());
-        return requestBody.toString();
-    }
-
-    public static String getFieldFromResponse(CloseableHttpResponse response, String field) throws IOException, ParseException {
-
-        return JsonParser.parseString(EntityUtils.toString(response.getEntity()))
-                         .getAsJsonObject()
-                         .get(field)
-                         .getAsString();
-    }
-
-    public static String getSearchCountQueryForKind(String kind) {
-
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("kind", kind);
-        requestBody.addProperty("limit", 1);
-        requestBody.addProperty("trackTotalCount", true);
-        return requestBody.toString();
-    }
-
-    public static String getSearchUrl() {
-
-        String searchUrl = System.getProperty("SEARCH_URL", System.getenv("SEARCH_URL"));
-        if (searchUrl == null || searchUrl.contains("-null")) {
-            throw new IllegalArgumentException("Invalid SEARCH_URL: " + searchUrl);
-        }
-        return searchUrl;
-    }
-
-    public static String getIndexerUrl() {
-
-        String indexerUrl = System.getProperty("INDEXER_URL", System.getenv("INDEXER_URL"));
-        if (indexerUrl == null || indexerUrl.contains("-null")) {
-            throw new IllegalArgumentException("Invalid INDEXER_URL: " + indexerUrl);
-        }
-        return indexerUrl;
-    }
-
-    public static ReplayStatusResponseHelper getConvertedReplayStatusResponseFromResponse(CloseableHttpResponse response) throws ProtocolException, IOException {
-
-        String json = EntityUtils.toString(response.getEntity());
-        Gson gson = new Gson();
-        return gson.fromJson(json, ReplayStatusResponseHelper.class);
-    }
+  public static SearchCountRequest searchCountRequest(String kind) {
+    return new SearchCountRequest(kind, 1, true);
+  }
 }

@@ -14,184 +14,136 @@
 
 package org.opengroup.osdu.storage.records;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import java.util.Map;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class GetRecordsIntegrationTest extends TestBase {
-	private static final String RECORD_ID = TenantUtils.getTenantName() + ":getrecord:" + System.currentTimeMillis();
-	private static final String ANOTHER_RECORD_ID = TenantUtils.getTenantName() + ":getrecordnodup:" + System.currentTimeMillis();
+public final class GetRecordsIntegrationTest extends BaseRecordsAcceptanceTest {
 
-	private static final String KIND = TenantUtils.getTenantName() + ":ds:getrecord:1.0."
-			+ System.currentTimeMillis();
+  private String RECORD_ID;
+  private String ANOTHER_RECORD_ID;
+  private String KIND;
+  private String LEGAL_TAG_NAME_A;
+  private String LEGAL_TAG_NAME_B;
 
-	private static String LEGAL_TAG_NAME_A;
-	private static String LEGAL_TAG_NAME_B;
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    RECORD_ID = getTenantId() + ":getrecord:" + now;
+    ANOTHER_RECORD_ID = getTenantId() + ":getrecordnodup:" + now;
+    KIND = getTenantId() + ":ds:getrecord:1.0." + now;
+    LEGAL_TAG_NAME_A = getTenantId() + "-storage-a-" + now;
+    LEGAL_TAG_NAME_B = getTenantId() + "-storage-b-" + now;
 
-	private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
+    createLegalTag(LEGAL_TAG_NAME_A);
+    Thread.sleep(100);
+    createLegalTag(LEGAL_TAG_NAME_B);
 
-	@BeforeAll
-	public static void classSetup() throws Exception {
-		GetRecordsIntegrationTest.classSetup(TOKEN_TEST_UTILS.getToken());
-	}
+    HttpResponse<CreateRecordsResponse> response = storageClient.putRecords(withTestAcl(RecordUtil.createDefaultRecords(RECORD_ID, KIND, LEGAL_TAG_NAME_A)));
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
+  }
 
-	@AfterAll
-	public static void classTearDown() throws Exception {
-		GetRecordsIntegrationTest.classTearDown(TOKEN_TEST_UTILS.getToken());
-	}
+  @Test
+  public void should_getRecord_when_validRecordIdIsProvided() {
+    var getResponse = storageClient.getRecord(RECORD_ID);
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
+    StorageRecord record = getResponse.body();
+    assertEquals(RECORD_ID, record.id());
+    assertEquals(KIND, record.kind());
+    assertEquals(getAcl(), record.acl().owners()[0]);
+    assertEquals(getAcl(), record.acl().viewers()[0]);
 
-	@BeforeEach
-	@Override
-	public void setup() throws Exception {
-		this.testUtils = new TokenTestUtils();
-	}
+    @SuppressWarnings("unchecked")
+    Map<String, Object> intTag = (Map<String, Object>) record.data().get("int-tag");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> doubleTag = (Map<String, Object>) record.data().get("double-tag");
+    assertEquals(58377304471659395L, intTag.get("score-int"));
+    assertEquals(58377304.471659395, doubleTag.get("score-double"));
+    assertEquals(123456789L, record.data().get("count"));
+  }
 
-	@AfterEach
-	@Override
-	public void tearDown() throws Exception {
-		this.testUtils = null;
-	}
+  @Test
+  public void should_getRecord_withoutDuplicates_when_duplicateAclAndLegaltagsAreProvided() {
+    StorageRecord[] jsonInputWithDuplicates = withTestAcl(
+        RecordUtil.createRecordsWithDuplicateAclAndLegaltags(ANOTHER_RECORD_ID, KIND,
+            LEGAL_TAG_NAME_A));
+    HttpResponse<CreateRecordsResponse> putResponse = storageClient.putRecords(jsonInputWithDuplicates);
+    assertEquals(HttpStatus.SC_CREATED, putResponse.statusCode());
 
-	public static void classSetup(String token) throws Exception {
-        LEGAL_TAG_NAME_A = LegalTagUtils.createRandomName();
-        Thread.sleep(100);
-        LEGAL_TAG_NAME_B = LegalTagUtils.createRandomName();
+    var getResponse = storageClient.getRecord(ANOTHER_RECORD_ID);
 
-        LegalTagUtils.create(LEGAL_TAG_NAME_A, token);
-        LegalTagUtils.create(LEGAL_TAG_NAME_B, token);
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
 
-		String jsonInput = RecordUtil.createDefaultJsonRecord(RECORD_ID, KIND, LEGAL_TAG_NAME_A);
+    StorageRecord record = getResponse.body();
+    assertEquals(ANOTHER_RECORD_ID, record.id());
+    assertEquals(KIND, record.kind());
+    assertEquals(LEGAL_TAG_NAME_A, record.legal().legaltags()[0]);
+    assertEquals(getAcl(), record.acl().owners()[0]);
+    assertEquals(getAcl(), record.acl().viewers()[0]);
+  }
 
-		CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), jsonInput, "");
-		assertEquals(HttpStatus.SC_CREATED, response.getCode());
-		assertTrue(response.getEntity().getContentType().contains("application/json"));
-	}
+  @Test
+  public void should_getOnlyTheCertainDataFields_when_attributesAreProvided() {
+    var getResponse = storageClient.getRecord(RECORD_ID,
+        "?attribute=data.count&attribute=data.int-tag.score-int");
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
+    StorageRecord record = getResponse.body();
+    assertEquals(RECORD_ID, record.id());
+    assertEquals(KIND, record.kind());
+    assertEquals(getAcl(), record.acl().owners()[0]);
+    assertEquals(getAcl(), record.acl().viewers()[0]);
 
-	public static void classTearDown(String token) throws Exception {
-		TestUtils.send("records/" + RECORD_ID, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), token), "", "");
-        LegalTagUtils.delete(LEGAL_TAG_NAME_A, token);
-        Thread.sleep(100);
-        LegalTagUtils.delete(LEGAL_TAG_NAME_B, token);
-	}
+    assertEquals(58377304471659395L, record.data().get("int-tag.score-int"));
+    assertNull(record.data().get("double-tag"));
+    assertEquals(123456789L, record.data().get("count"));
+  }
 
-	@Test
-	public void should_getRecord_when_validRecordIdIsProvided() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("records/" + RECORD_ID, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
+  @Test
+  public void should_notReturnFieldsAlreadyInDatastore_when_returningRecord() {
+    var getResponse = storageClient.getRecord(RECORD_ID);
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
+    StorageRecord record = getResponse.body();
+    assertNotNull(record.id());
+    assertNotNull(record.kind());
+    assertNotNull(record.acl());
+    assertNotNull(record.version());
+    assertNotNull(record.data());
+    assertNotNull(record.createTime());
 
-		JsonObject json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-		JsonObject dataJson = json.get("data").getAsJsonObject();
-		JsonObject acl = json.get("acl").getAsJsonObject();
+    assertNull(record.meta());
+    assertNull(record.tags());
+    assertNull(record.modifyUser());
+    assertNull(record.modifyTime());
+  }
 
-		assertEquals(RECORD_ID, json.get("id").getAsString());
-		assertEquals(KIND, json.get("kind").getAsString());
-		assertEquals(TestUtils.getAcl(), acl.get("owners").getAsString());
-		assertEquals(TestUtils.getAcl(), acl.get("viewers").getAsString());
+  @Test
+  public void should_legaltagChange_when_updateRecordWithLegaltag() {
+    StorageRecord[] newJsonInput = withTestAcl(
+        RecordUtil.createDefaultRecords(RECORD_ID, KIND, LEGAL_TAG_NAME_B));
+    HttpResponse<CreateRecordsResponse> response = storageClient.putRecords("?skipdupes=false", newJsonInput);
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
 
-		assertEquals("58377304471659395", dataJson.get("int-tag").getAsJsonObject().get("score-int").toString());
-		assertEquals("5.837730447165939E7",
-				dataJson.get("double-tag").getAsJsonObject().get("score-double").toString());
-		assertEquals("123456789", dataJson.get("count").toString());
-	}
+    var getResponse = storageClient.getRecord(RECORD_ID);
 
-	@Test
-	public void should_getRecord_withoutDuplicates_when_duplicateAclAndLegaltagsAreProvided() throws Exception {
-		String jsonInputWithDuplicates = RecordUtil.createRecordWithDuplicateAclAndLegaltags(ANOTHER_RECORD_ID, KIND, LEGAL_TAG_NAME_A);
-		CloseableHttpResponse putResponse = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), jsonInputWithDuplicates, "");
-		assertEquals(HttpStatus.SC_CREATED, putResponse.getCode());
-		assertTrue(putResponse.getEntity().getContentType().contains("application/json"));
+    assertEquals(HttpStatus.SC_OK, getResponse.statusCode());
 
-		CloseableHttpResponse response = TestUtils.send("records/" + ANOTHER_RECORD_ID, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		JsonObject json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-		JsonObject acl = json.get("acl").getAsJsonObject();
-		JsonObject legal = json.get("legal").getAsJsonObject();
-
-		assertEquals(ANOTHER_RECORD_ID, json.get("id").getAsString());
-		assertEquals(KIND, json.get("kind").getAsString());
-		assertEquals(LEGAL_TAG_NAME_A, legal.get("legaltags").getAsString());
-		assertEquals(TestUtils.getAcl(), acl.get("owners").getAsString());
-		assertEquals(TestUtils.getAcl(), acl.get("viewers").getAsString());
-	}
-
-	@Test
-	public void should_getOnlyTheCertainDataFields_when_attributesAreProvided() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("records/" + RECORD_ID, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "",
-				"?attribute=data.count&attribute=data.int-tag.score-int");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		JsonObject json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-		JsonObject dataJson = json.get("data").getAsJsonObject();
-		JsonObject acl = json.get("acl").getAsJsonObject();
-
-		assertEquals(RECORD_ID, json.get("id").getAsString());
-		assertEquals(KIND, json.get("kind").getAsString());
-		assertEquals(TestUtils.getAcl(), acl.get("owners").getAsString());
-		assertEquals(TestUtils.getAcl(), acl.get("viewers").getAsString());
-
-		assertEquals("58377304471659395", dataJson.get("int-tag.score-int").getAsString());
-		assertNull(dataJson.get("double-tag"));
-		assertEquals("123456789", dataJson.get("count").toString());
-	}
-
-	@Test
-	public void should_notReturnFieldsAlreadyInDatastore_when_returningRecord() throws Exception {
-		CloseableHttpResponse response = TestUtils.send("records/" + RECORD_ID, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-		assertEquals(HttpStatus.SC_OK, response.getCode());
-
-		JsonObject json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-
-		assertNotNull(json.get("id"));
-		assertNotNull(json.get("kind"));
-		assertNotNull(json.get("acl"));
-		assertNotNull(json.get("version"));
-		assertNotNull(json.get("data"));
-		assertNotNull(json.get("createTime"));
-
-		assertNull(json.get("bucket"));
-		assertNull(json.get("status"));
-		assertNull(json.get("modifyUser"));
-		assertNull(json.get("modifyTime"));
-	}
-
-    @Test
-    public void should_legaltagChange_when_updateRecordWithLegaltag() throws Exception {
-		String newJsonInput = RecordUtil.createDefaultJsonRecord(RECORD_ID, KIND, LEGAL_TAG_NAME_B);
-        CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), newJsonInput, "?skipdupes=false");
-        assertEquals(HttpStatus.SC_CREATED, response.getCode());
-
-        response = TestUtils.send("records/" + RECORD_ID, "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-
-        JsonObject json = JsonParser.parseString(EntityUtils.toString(response.getEntity())).getAsJsonObject();
-
-        assertEquals(RECORD_ID, json.get("id").getAsString());
-        assertEquals(KIND, json.get("kind").getAsString());
-
-        JsonArray legaltags = json.get("legal").getAsJsonObject().get("legaltags").getAsJsonArray();
-        String updatedLegaltag = legaltags.get(0).getAsString();
-        assertEquals(1, legaltags.size());
-        assertEquals(LEGAL_TAG_NAME_B, updatedLegaltag);
-    }
+    StorageRecord record = getResponse.body();
+    assertEquals(RECORD_ID, record.id());
+    assertEquals(KIND, record.kind());
+    assertEquals(1, record.legal().legaltags().length);
+    assertEquals(LEGAL_TAG_NAME_B, record.legal().legaltags()[0]);
+  }
 }

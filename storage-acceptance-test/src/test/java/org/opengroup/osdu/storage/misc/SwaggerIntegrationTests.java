@@ -17,42 +17,28 @@
 
 package org.opengroup.osdu.storage.misc;
 
+import org.opengroup.osdu.core.test.client.HttpResponse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.util.HashMap;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 
-public final class SwaggerIntegrationTests extends TestBase {
+public final class SwaggerIntegrationTests extends BaseStorageAcceptanceTest {
 
-    public static final String SWAGGER_API_PATH = "swagger-ui/index.html";
-    public static final String SWAGGER_API_DOCS_PATH = "api-docs";
+  public static final String SWAGGER_API_PATH = "swagger-ui/index.html";
+  public static final String SWAGGER_API_DOCS_PATH = "api-docs";
 
-    @Override
-    public void setup() throws Exception {
-        // the test suite does not require pre-run configuration
-    }
+  @Test
+  public void shouldReturn200_whenSwaggerApiIsCalled() {
+    HttpResponse<Void> response = storageClient.getSwaggerUi();
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+  }
 
-    @Override
-    public void tearDown() throws Exception {
-        // the test suite does not require post-run tear-down procedures
-    }
-
-    @Test
-    public void shouldReturn200_whenSwaggerApiIsCalled() throws Exception {
-        CloseableHttpResponse response = TestUtils
-                .send(SWAGGER_API_PATH, "GET", new HashMap<>(), "", "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-    }
-
-    @Test
-    public void shouldReturn200_whenSwaggerApiDocsIsCalled() throws Exception {
-        CloseableHttpResponse response = TestUtils
-                .send(SWAGGER_API_DOCS_PATH, "GET", new HashMap<>(), "", "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-    }
-
+  @Test
+  public void shouldReturn200_whenSwaggerApiDocsIsCalled() {
+    HttpResponse<Void> response = storageClient.getApiDocs();
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+  }
 }

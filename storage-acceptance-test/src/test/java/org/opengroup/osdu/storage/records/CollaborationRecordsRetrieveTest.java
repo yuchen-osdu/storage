@@ -14,251 +14,292 @@
 
 package org.opengroup.osdu.storage.records;
 
-import static org.apache.http.HttpStatus.SC_OK;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+
+import org.opengroup.osdu.core.test.client.model.storage.ConvertedRecords;
+import org.opengroup.osdu.core.test.client.model.storage.QueryResult;
+import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
+import org.opengroup.osdu.core.test.client.model.storage.RecordVersions;
+import org.opengroup.osdu.core.test.client.model.storage.Records;
+
+import static org.apache.hc.core5.http.HttpStatus.SC_OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
-import static org.opengroup.osdu.storage.util.HeaderUtils.getHeadersWithxCollaboration;
-import static org.opengroup.osdu.storage.util.TestUtils.assertRecordVersion;
-import static org.opengroup.osdu.storage.util.TestUtils.createRecordInCollaborationContext_AndReturnVersion;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import org.opengroup.osdu.core.test.client.model.storage.QueryRecordsRequest;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.ConfigUtils;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.core.test.client.ClientException;
 
-public final class CollaborationRecordsRetrieveTest extends TestBase {
+public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanceTest {
 
-    private static boolean isCollaborationEnabled = false;
-    private static final DummyRecordsHelper RECORDS_HELPER = new DummyRecordsHelper();
-    private static final String APPLICATION_NAME = "storage service integration test";
-    private static final String TENANT_NAME = TenantUtils.getTenantName();
-    private static final long CURRENT_TIME_MILLIS = System.currentTimeMillis();
-    private static final String COLLABORATION1_ID = UUID.randomUUID().toString();
-    private static final String COLLABORATION2_ID = UUID.randomUUID().toString();
-    private static final String RECORD_ID_1 = TENANT_NAME + ":inttest:1" + CURRENT_TIME_MILLIS;
-    private static final String RECORD_ID_2 = TENANT_NAME + ":inttest:2" + CURRENT_TIME_MILLIS;
-    private static final String RECORD_ID_3 = TENANT_NAME + ":inttest:3" + CURRENT_TIME_MILLIS;
-    private static final String KIND1 = TENANT_NAME + ":ds:inttest:1" + CURRENT_TIME_MILLIS;
-    private static final String KIND2 = TENANT_NAME + ":ds:inttest:2" + CURRENT_TIME_MILLIS;
-    private static final String KIND3 = TENANT_NAME + ":ds:inttest:3" + CURRENT_TIME_MILLIS;
-    private static Long RECORD1_V1;
-    private static Long RECORD1_V2;
-    private static Long RECORD1_V3;
-    private static Long RECORD1_V4;
-    private static Long RECORD2_V1;
-    private static Long RECORD2_V2;
-    private static Long RECORD3_V1;
-    private static Long RECORD3_V2;
-    private static String LEGAL_TAG_NAME_A;
+  private static final String APPLICATION_NAME = "storage service integration test";
 
-    @Override
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        this.configUtils = new ConfigUtils("test.properties");
+  private boolean isCollaborationEnabled;
+  private String collaboration1Id;
+  private String collaboration2Id;
+  private String recordId1;
+  private String recordId2;
+  private String recordId3;
+  private String kind1;
+  private String kind2;
+  private String kind3;
+  private Long record1V1;
+  private Long record1V2;
+  private Long record1V3;
+  private Long record1V4;
+  private Long record2V1;
+  private Long record2V2;
+  private Long record3V1;
+  private Long record3V2;
 
-        if (configUtils != null && !configUtils.getIsCollaborationEnabled()) {
-            return;
-        }
-        isCollaborationEnabled = true;
-        LEGAL_TAG_NAME_A = LegalTagUtils.createRandomName();
-        LegalTagUtils.create(LEGAL_TAG_NAME_A, testUtils.getToken());
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    if (!configUtils.getIsCollaborationEnabled()) {
+      isCollaborationEnabled = false;
+      return;
+    }
+    isCollaborationEnabled = true;
+    long now = System.currentTimeMillis();
+    collaboration1Id = UUID.randomUUID().toString();
+    collaboration2Id = UUID.randomUUID().toString();
+    recordId1 = getTenantId() + ":inttest:1" + now;
+    recordId2 = getTenantId() + ":inttest:2" + now;
+    recordId3 = getTenantId() + ":inttest:3" + now;
+    kind1 = getTenantId() + ":ds:inttest:1" + now;
+    kind2 = getTenantId() + ":ds:inttest:2" + now;
+    kind3 = getTenantId() + ":ds:inttest:3" + now;
+    String legalTagNameA = createLegalTagName("");
+    createLegalTag(legalTagNameA);
 
-        RECORD1_V1 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND1, LEGAL_TAG_NAME_A, null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD1_V2 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND1, LEGAL_TAG_NAME_A, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD1_V3 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND1, LEGAL_TAG_NAME_A, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD1_V4 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_1, KIND1, LEGAL_TAG_NAME_A, COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
+    record1V1 = createRecordInCollaborationAndReturnVersion(recordId1, kind1, legalTagNameA, null,
+        APPLICATION_NAME);
+    record1V2 = createRecordInCollaborationAndReturnVersion(recordId1, kind1, legalTagNameA,
+        collaboration1Id, APPLICATION_NAME);
+    record1V3 = createRecordInCollaborationAndReturnVersion(recordId1, kind1, legalTagNameA,
+        collaboration1Id, APPLICATION_NAME);
+    record1V4 = createRecordInCollaborationAndReturnVersion(recordId1, kind1, legalTagNameA,
+        collaboration2Id, APPLICATION_NAME);
 
-        RECORD2_V1 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_2, KIND1, LEGAL_TAG_NAME_A, null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD2_V2 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_2, KIND1, LEGAL_TAG_NAME_A, COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
+    record2V1 = createRecordInCollaborationAndReturnVersion(recordId2, kind1, legalTagNameA, null,
+        APPLICATION_NAME);
+    record2V2 = createRecordInCollaborationAndReturnVersion(recordId2, kind1, legalTagNameA,
+        collaboration2Id, APPLICATION_NAME);
 
-        RECORD3_V1 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_3, KIND2, LEGAL_TAG_NAME_A, COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
-        RECORD3_V2 = createRecordInCollaborationContext_AndReturnVersion(RECORD_ID_3, KIND2, LEGAL_TAG_NAME_A, COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken());
+    record3V1 = createRecordInCollaborationAndReturnVersion(recordId3, kind2, legalTagNameA,
+        collaboration1Id, APPLICATION_NAME);
+    record3V2 = createRecordInCollaborationAndReturnVersion(recordId3, kind2, legalTagNameA,
+        collaboration2Id, APPLICATION_NAME);
+  }
+
+  @AfterEach
+  void cleanupCollaborationRecords() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    storageClient.deleteRecord(recordId1, collaborationHeaders(null, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId2, collaborationHeaders(null, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId2, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId3, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    storageClient.deleteRecord(recordId3, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+  }
+
+  @Test
+  public void should_getLatestVersion_when_validRecordIdAndCollaborationIdAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    HttpResponse<StorageRecord> response = storageClient.getRecord(recordId1, collaborationHeaders(null, APPLICATION_NAME));
+    assertRecordVersion(response, record1V1);
+
+    response = storageClient.getRecord(recordId1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertRecordVersion(response, record1V3);
+
+    response = storageClient.getRecord(recordId1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    assertRecordVersion(response, record1V4);
+
+    ClientException notInCollaboration1 = assertThrows(ClientException.class,
+        () -> storageClient.getRecord(recordId2,
+            collaborationHeaders(collaboration1Id, APPLICATION_NAME)));
+    assertEquals(HttpStatus.SC_NOT_FOUND, notInCollaboration1.getStatusCode());
+  }
+
+  @Test
+  public void should_getCorrectRecordVersion_when_validRecordIdAndCollaborationIdAndRecordVersionAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    HttpResponse<StorageRecord> response = storageClient.getRecordVersion(recordId1,
+        String.valueOf(record1V2),
+        collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertRecordVersion(response, record1V2);
+
+    ClientException wrongCollaborationVersion = assertThrows(ClientException.class,
+        () -> storageClient.getRecordVersion(recordId1, String.valueOf(record1V2),
+            collaborationHeaders(collaboration2Id, APPLICATION_NAME)));
+    assertEquals(HttpStatus.SC_NOT_FOUND, wrongCollaborationVersion.getStatusCode());
+  }
+
+  @Test
+  public void should_getAllRecordVersions_when_validRecordIdAndCollaborationIdAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    var versionsHttpResponse = storageClient.getRecordVersions(recordId1,
+        collaborationHeaders(null, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_OK, versionsHttpResponse.statusCode());
+    RecordVersions versionsResponse = versionsHttpResponse.body();
+    assertEquals(1, versionsResponse.versions().length);
+    assertEquals(record1V1, versionsResponse.versions()[0]);
+
+    versionsHttpResponse = storageClient.getRecordVersions(recordId1,
+        collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_OK, versionsHttpResponse.statusCode());
+    versionsResponse = versionsHttpResponse.body();
+    assertEquals(2, versionsResponse.versions().length);
+    List<Long> versions = Arrays.asList(versionsResponse.versions());
+    assertTrue(versions.contains(record1V2));
+    assertTrue(versions.contains(record1V3));
+  }
+
+  @Test
+  public void should_getRecordsOnlyInCollaborationContext_whenQueryByKind() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    var response = storageClient.queryRecordsGet("?kind=" + kind1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    assertEquals(SC_OK, response.statusCode());
+    QueryResult responseObject = response.body();
+    assertEquals(2, responseObject.results().length);
+    assertTrue(Arrays.asList(responseObject.results()).contains(recordId1));
+    assertTrue(Arrays.asList(responseObject.results()).contains(recordId2));
+
+    response = storageClient.queryRecordsGet("?kind=" + kind1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(SC_OK, response.statusCode());
+    responseObject = response.body();
+    assertEquals(1, responseObject.results().length);
+    assertTrue(Arrays.asList(responseObject.results()).contains(recordId1));
+
+    response = storageClient.queryRecordsGet("?kind=" + kind3, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(SC_OK, response.statusCode());
+    responseObject = response.body();
+    assertEquals(0, responseObject.results().length);
+  }
+
+  @Test
+  public void should_getEmptyRecordsInNoCollaborationContext_whenQueryByKind() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    var response = storageClient.queryRecordsGet("?kind=" + kind2, collaborationHeaders(null, null));
+    assertEquals(SC_OK, response.statusCode());
+    QueryResult responseObject = response.body();
+    assertEquals(0, responseObject.results().length);
+  }
+
+  @Test
+  public void should_fetchCorrectRecords_when_validRecordIdsAndCollaborationIdAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    var fetchResponse = storageClient.queryRecordsBatchPost(QueryRecordsRequest.of(recordId1, recordId2, recordId3),
+        collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+    ConvertedRecords responseObject = fetchResponse.body();
+    assertEquals(2, responseObject.records().length);
+    assertEquals(1, responseObject.notFound().length);
+    assertEquals(0, responseObject.conversionStatuses().size());
+    for (StorageRecord record : responseObject.records()) {
+      if (record.id().equals(recordId1)) {
+        assertEquals(record1V3, Long.valueOf(record.version()));
+      } else if (record.id().equals(recordId2)) {
+        fail("should not contain record 2: " + recordId2);
+      } else if (record.id().equals(recordId3)) {
+        assertEquals(record3V1, Long.valueOf(record.version()));
+      } else {
+        fail(String.format("should only contain record 1 %s, and record 3 %s", recordId1,
+            recordId3));
+      }
     }
 
-    @AfterEach
-    public void tearDown() throws Exception {
-        if (!isCollaborationEnabled) return;
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_1, "DELETE", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_2, "DELETE", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_2, "DELETE", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_3, "DELETE", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID_3, "DELETE", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        LegalTagUtils.delete(LEGAL_TAG_NAME_A, testUtils.getToken());
+    fetchResponse = storageClient.queryRecordsBatchPost(
+        QueryRecordsRequest.of(recordId1, recordId2, recordId3),
+        collaborationHeaders(null, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+    responseObject = fetchResponse.body();
+    assertEquals(2, responseObject.records().length);
+    assertEquals(1, responseObject.notFound().length);
+    assertEquals(0, responseObject.conversionStatuses().size());
+    for (StorageRecord record : responseObject.records()) {
+      if (record.id().equals(recordId1)) {
+        assertEquals(record1V1, Long.valueOf(record.version()));
+      } else if (record.id().equals(recordId2)) {
+        assertEquals(record2V1, Long.valueOf(record.version()));
+      } else if (record.id().equals(recordId3)) {
+        fail("should not contain record 3: " + recordId3);
+      } else {
+        fail(String.format("should only contain record 1 %s, and record 2 %s", recordId1,
+            recordId2));
+      }
+    }
+  }
 
-        this.testUtils = null;
-        this.configUtils = null;
+  @Test
+  public void should_queryAllRecords_when_validRecordIdsAndCollaborationIdAreProvided() {
+    if (!isCollaborationEnabled) {
+      return;
+    }
+    var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.of(recordId1, recordId2, recordId3),
+        collaborationHeaders(collaboration2Id, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    Records responseObject = queryResponse.body();
+    assertEquals(3, responseObject.records().length);
+    assertEquals(0, responseObject.invalidRecords().length);
+    assertEquals(0, responseObject.retryRecords().length);
+    for (StorageRecord record : responseObject.records()) {
+      if (record.id().equals(recordId1)) {
+        assertEquals(record1V4, Long.valueOf(record.version()));
+      } else if (record.id().equals(recordId2)) {
+        assertEquals(record2V2, Long.valueOf(record.version()));
+      } else if (record.id().equals(recordId3)) {
+        assertEquals(record3V2, Long.valueOf(record.version()));
+      } else {
+        fail(String.format("should only contain record 1 %s, 2 %s and record 3 %s", recordId1,
+            recordId2, recordId3));
+      }
     }
 
-    @Test
-    public void should_getLatestVersion_when_validRecordIdAndCollaborationIdAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        //get record1 --> v1
-        CloseableHttpResponse response = TestUtils.send("records/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD1_V1);
-        //get record1 with guid1 --> v3
-        response = TestUtils.send("records/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD1_V3);
-        //get record1 with guid2 --> v4
-        response = TestUtils.send("records/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD1_V4);
-        //get record2 with guid1 --> 404
-        response = TestUtils.send("records/" + RECORD_ID_2, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
+    queryResponse = storageClient.queryRecordsPost(
+        QueryRecordsRequest.of(recordId1, recordId2, recordId3),
+        collaborationHeaders(collaboration1Id, APPLICATION_NAME));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+    responseObject = queryResponse.body();
+    assertEquals(2, responseObject.records().length);
+    assertEquals(1, responseObject.invalidRecords().length);
+    assertEquals(0, responseObject.retryRecords().length);
+    for (StorageRecord record : responseObject.records()) {
+      if (record.id().equals(recordId1)) {
+        assertEquals(record1V3, Long.valueOf(record.version()));
+      } else if (record.id().equals(recordId2)) {
+        fail("should not contain record 2: " + recordId2);
+      } else if (record.id().equals(recordId3)) {
+        assertEquals(record3V1, Long.valueOf(record.version()));
+      } else {
+        fail(String.format("should only contain record 1 %s, and record 3 %s", recordId1,
+            recordId3));
+      }
     }
-
-    @Test
-    public void should_getCorrectRecordVersion_when_validRecordIdAndCollaborationIdAndRecordVersionAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        //get record1 with v2 with context guid1
-        CloseableHttpResponse response = TestUtils.send("records/" + RECORD_ID_1 + "/" + RECORD1_V2, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertRecordVersion(response, RECORD1_V2);
-        //get 404 for record1 with v2 with context guid2
-        response = TestUtils.send("records/" + RECORD_ID_1 + "/" + RECORD1_V2, "GET", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        assertEquals(HttpStatus.SC_NOT_FOUND, response.getCode());
-    }
-
-    @Test
-    public void should_getAllRecordVersions_when_validRecordIdAndCollaborationIdAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        //I will get only v1 for record1 with no context
-        CloseableHttpResponse response = TestUtils.send("records/versions/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        RecordsApiAcceptanceTests.GetVersionsResponse versionsResponse = TestUtils.getResult(response, HttpStatus.SC_OK, RecordsApiAcceptanceTests.GetVersionsResponse.class);
-        assertEquals(1, versionsResponse.versions.length);
-        assertEquals(RECORD1_V1, versionsResponse.versions[0]);
-
-        //I will get v2 and v3 for record1 with context guid1
-        response = TestUtils.send("records/versions/" + RECORD_ID_1, "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
-        versionsResponse = TestUtils.getResult(response, HttpStatus.SC_OK, RecordsApiAcceptanceTests.GetVersionsResponse.class);
-        assertEquals(2, versionsResponse.versions.length);
-        List<Long> versions = Arrays.asList(versionsResponse.versions);
-        assertTrue(versions.contains(RECORD1_V2));
-        assertTrue(versions.contains(RECORD1_V3));
-    }
-
-    @Test
-    public void should_getRecordsOnlyInCollaborationContext_whenQueryByKind() throws Exception {
-        if (!isCollaborationEnabled) return;
-        CloseableHttpResponse response = TestUtils.send("query/records", "GET", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "?kind=" + KIND1);
-        assertEquals(SC_OK, response.getCode());
-        DummyRecordsHelper.QueryResultMock responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-        assertEquals(2, responseObject.results.length);
-        assertTrue(Arrays.stream(responseObject.results).anyMatch(RECORD_ID_1::equals));
-        assertTrue(Arrays.stream(responseObject.results).anyMatch(RECORD_ID_2::equals));
-
-        response = TestUtils.send("query/records", "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "?kind=" + KIND1);
-        assertEquals(SC_OK, response.getCode());
-        responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-        assertEquals(1, responseObject.results.length);
-        assertTrue(Arrays.stream(responseObject.results).anyMatch(RECORD_ID_1::equals));
-
-        response = TestUtils.send("query/records", "GET", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "?kind=" + KIND3);
-        assertEquals(SC_OK, response.getCode());
-        responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-        assertEquals(0, responseObject.results.length);
-    }
-
-    @Test
-    public void should_getEmptyRecordsInNoCollaborationContext_whenQueryByKind() throws Exception {
-        if (!isCollaborationEnabled) return;
-        CloseableHttpResponse response = TestUtils.send("query/records", "GET", getHeadersWithxCollaboration(null, null, TENANT_NAME, testUtils.getToken()), "", "?kind=" + KIND2);
-        assertEquals(SC_OK, response.getCode());
-        DummyRecordsHelper.QueryResultMock responseObject = RECORDS_HELPER.getQueryResultMockFromResponse(response);
-        assertEquals(0, responseObject.results.length);
-    }
-
-    @Test
-    public void should_fetchCorrectRecords_when_validRecordIdsAndCollaborationIdAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        //If I fetch records 1, 2,and 3 in context guid1,I should get a 200 with records 1 and 3
-        JsonArray records = new JsonArray();
-        records.add(RECORD_ID_1);
-        records.add(RECORD_ID_2);
-        records.add(RECORD_ID_3);
-        JsonObject body = new JsonObject();
-        body.add("records", records);
-        CloseableHttpResponse response = TestUtils.send("query/records:batch", "POST", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), body.toString(), "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-
-        DummyRecordsHelper.ConvertedRecordsMock responseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(response);
-        assertEquals(2, responseObject.records.length);
-        assertEquals(1, responseObject.notFound.length);
-        assertEquals(0, responseObject.conversionStatuses.size());
-        for (DummyRecordsHelper.RecordResultMock record : responseObject.records) {
-            if (record.id.equals(RECORD_ID_1)) assertEquals(RECORD1_V3, Long.valueOf(record.version));
-            else if (record.id.equals(RECORD_ID_2)) fail("should not contain record 2: " + RECORD_ID_2);
-            else if (record.id.equals(RECORD_ID_3)) assertEquals(RECORD3_V1, Long.valueOf(record.version));
-            else fail(String.format("should only contain record 1 %s, and record 3 %s", RECORD_ID_1, RECORD_ID_3));
-        }
-
-        // If I fetch records 1, 2, and 3 in no context, I should get a 200 with records 1 and 2
-        response = TestUtils.send("query/records:batch", "POST", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), body.toString(), "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-
-        responseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(response);
-        assertEquals(2, responseObject.records.length);
-        assertEquals(1, responseObject.notFound.length);
-        assertEquals(0, responseObject.conversionStatuses.size());
-        for (DummyRecordsHelper.RecordResultMock record : responseObject.records) {
-            if (record.id.equals(RECORD_ID_1)) assertEquals(RECORD1_V1, Long.valueOf(record.version));
-            else if (record.id.equals(RECORD_ID_2)) assertEquals(RECORD2_V1, Long.valueOf(record.version));
-            else if (record.id.equals(RECORD_ID_3)) fail("should not contain record 3: " + RECORD_ID_3);
-            else fail(String.format("should only contain record 1 %s, and record 2 %s", RECORD_ID_1, RECORD_ID_2));
-        }
-    }
-
-    @Test
-    public void should_queryAllRecords_when_validRecordIdsAndCollaborationIdAreProvided() throws Exception {
-        if (!isCollaborationEnabled) return;
-        // If I query records 1,2 and 3 in context guid2, I should get 200 with records 1,2 and 3
-        JsonArray records = new JsonArray();
-        records.add(RECORD_ID_1);
-        records.add(RECORD_ID_2);
-        records.add(RECORD_ID_3);
-        JsonObject body = new JsonObject();
-        body.add("records", records);
-        CloseableHttpResponse response = TestUtils.send("query/records", "POST", getHeadersWithxCollaboration(COLLABORATION2_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), body.toString(), "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-
-        DummyRecordsHelper.RecordsMock responseObject = RECORDS_HELPER.getRecordsMockFromResponse(response);
-        assertEquals(3, responseObject.records.length);
-        assertEquals(0, responseObject.invalidRecords.length);
-        assertEquals(0, responseObject.retryRecords.length);
-        for (DummyRecordsHelper.RecordResultMock record : responseObject.records) {
-            if (record.id.equals(RECORD_ID_1)) assertEquals(RECORD1_V4, Long.valueOf(record.version));
-            else if (record.id.equals(RECORD_ID_2)) assertEquals(RECORD2_V2, Long.valueOf(record.version));
-            else if (record.id.equals(RECORD_ID_3)) assertEquals(RECORD3_V2, Long.valueOf(record.version));
-            else fail(String.format("should only contain record 1 %s, 2 %s and record 3 %s", RECORD_ID_1, RECORD_ID_2, RECORD_ID_3));
-        }
-
-        // If I query records 1, 2 and 3 in context guid1, I should get 2xx with records 1 and 3
-        response = TestUtils.send("query/records", "POST", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), body.toString(), "");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-
-        responseObject = RECORDS_HELPER.getRecordsMockFromResponse(response);
-        assertEquals(2, responseObject.records.length);
-        assertEquals(1, responseObject.invalidRecords.length);
-        assertEquals(0, responseObject.retryRecords.length);
-        for (DummyRecordsHelper.RecordResultMock record : responseObject.records) {
-            if (record.id.equals(RECORD_ID_1)) assertEquals(RECORD1_V3, Long.valueOf(record.version));
-            else if (record.id.equals(RECORD_ID_2)) fail("should not contain record 2: " + RECORD_ID_2);
-            else if (record.id.equals(RECORD_ID_3)) assertEquals(RECORD3_V1, Long.valueOf(record.version));
-            else fail(String.format("should only contain record 1 %s, and record 3 %s", RECORD_ID_1, RECORD_ID_3));
-        }
-    }
+  }
 }

@@ -17,61 +17,53 @@
 
 package org.opengroup.osdu.storage.records;
 
+import org.opengroup.osdu.core.test.client.ClientException;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V_2;
 import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION;
 
-import java.util.Map;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
+import org.apache.hc.core5.http.HttpStatus;
+import org.opengroup.osdu.core.test.auth.UserType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.EntitlementsUtil;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
 import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class RecordWithEntV2OnlyAclTest extends TestBase {
+public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest {
 
-    private static final long NOW = System.currentTimeMillis();
-    private static final String LEGAL_TAG = LegalTagUtils.createRandomName();
-    private static final String KIND = TenantUtils.getTenantName() + ":test:inttest:1.1." + NOW;
-    private static final String RECORD_ID = TenantUtils.getTenantName() + ":inttest:" + NOW;
+  private String LEGAL_TAG;
+  private String KIND;
+  private String RECORD_ID;
 
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    LEGAL_TAG = getTenantId() + "-storage-" + now;
+    KIND = getTenantId() + ":test:inttest:1.1." + now;
+    RECORD_ID = getTenantId() + ":inttest:" + now;
 
-    @BeforeEach
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        LegalTagUtils.create(LEGAL_TAG, testUtils.getToken());
-        Map<String, String> headers = HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken());
-        CloseableHttpResponse createGroupResponse = EntitlementsUtil.createEntitlementsGroup(
-            headers,
-            STORAGE_TEST_GROUP_ENT_V_2,
-            STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION
-        );
-        int responseCode = createGroupResponse.getCode();
-        assertTrue(responseCode == HttpStatus.SC_CREATED || responseCode == HttpStatus.SC_CONFLICT);
+    createLegalTag(LEGAL_TAG);
+    try {
+      var createGroupResponse = entitlementsClient.createGroup(
+          STORAGE_TEST_GROUP_ENT_V_2, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION,
+          UserType.PRIVILEGED_USER);
+      assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+    } catch (ClientException ex) {
+      assertEquals(HttpStatus.SC_CONFLICT, ex.getStatusCode());
+      assertEquals("This group already exists", ex.getMessage());
     }
+  }
 
-    @AfterEach
-    public void tearDown() throws Exception {
-        LegalTagUtils.delete(LEGAL_TAG, testUtils.getToken());
-        TestUtils.send("records/" + RECORD_ID, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-        this.testUtils = null;
-    }
-
-    @Test
-    public void should_allow_recordWithAclThatExistsOnlyInEntV2() throws Exception{
-        //create record
-        CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                RecordUtil.createJsonRecordWithEntV2OnlyAcl(RECORD_ID, KIND, LEGAL_TAG, RECORD_ID), "");
-        assertEquals(HttpStatus.SC_CREATED, response.getCode());
-    }
-
+  @Test
+  public void should_allow_recordWithAclThatExistsOnlyInEntV2() {
+    HttpResponse<CreateRecordsResponse> response = storageClient.putRecords(RecordUtil.replaceAcl(
+        RecordUtil.createRecordsWithEntV2OnlyAcl(RECORD_ID, KIND, LEGAL_TAG, RECORD_ID),
+        TestUtils.getEntV2OnlyAcl(), getEntV2OnlyAcl()));
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
+  }
 }

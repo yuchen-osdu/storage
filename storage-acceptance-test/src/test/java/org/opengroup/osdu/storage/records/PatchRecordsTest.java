@@ -14,317 +14,243 @@
 
 package org.opengroup.osdu.storage.records;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.opengroup.osdu.core.test.client.HttpResponse;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import org.opengroup.osdu.core.test.client.model.storage.ConvertedRecords;
+import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+import org.opengroup.osdu.core.test.client.model.storage.PatchOperation;
+import org.opengroup.osdu.core.test.client.model.storage.QueryRecordsRequest;
+import org.opengroup.osdu.core.test.client.model.storage.UpdateRecordsMetadataRequest;
+import org.opengroup.osdu.core.test.client.model.storage.UpdateRecordsMetadataResponse;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.DummyRecordsHelper;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.LegalTagUtils;
 import org.opengroup.osdu.storage.util.RecordUtil;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
 
-public final class PatchRecordsTest extends TestBase {
+import static org.junit.jupiter.api.Assertions.*;
 
-    private static long NOW = System.currentTimeMillis();
-    private static String LEGAL_TAG = LegalTagUtils.createRandomName();
-    private static String LEGAL_TAG_TO_BE_PATCHED = LegalTagUtils.createRandomName() + "1";
-    private static String KIND = TenantUtils.getFirstTenantName() + ":bulkupdate:test:1.1." + NOW;
-    private static String KIND_TO_BE_PATCHED = TenantUtils.getFirstTenantName() + ":bulkupdate:test:1.2." + NOW;
-    private static String RECORD_ID1 = TenantUtils.getFirstTenantName() + ":test:1.1." + NOW;
-    private static String RECORD_ID2 = TenantUtils.getFirstTenantName() + ":test:1.2." + NOW;
-    private static final int MAX_OP_NUMBER = 100;
+public final class PatchRecordsTest extends BaseRecordsAcceptanceTest {
 
-    private static final DummyRecordsHelper RECORDS_HELPER = new DummyRecordsHelper();
+  private String LEGAL_TAG;
+  private String LEGAL_TAG_TO_BE_PATCHED;
+  private String KIND;
+  private String KIND_TO_BE_PATCHED;
+  private String RECORD_ID1;
+  private String RECORD_ID2;
+  private static final int MAX_OP_NUMBER = 100;
 
-    @BeforeEach
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
-        LegalTagUtils.create(LEGAL_TAG, testUtils.getToken());
-        LegalTagUtils.create(LEGAL_TAG_TO_BE_PATCHED, testUtils.getToken());
+  @BeforeEach
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    long now = System.currentTimeMillis();
+    LEGAL_TAG = createLegalTagName("");
+    LEGAL_TAG_TO_BE_PATCHED = createLegalTagName("1");
+    KIND = getTenantId() + ":bulkupdate:test:1.1." + now;
+    KIND_TO_BE_PATCHED = getTenantId() + ":bulkupdate:test:1.2." + now;
+    RECORD_ID1 = getTenantId() + ":test:1.1." + now;
+    RECORD_ID2 = getTenantId() + ":test:1.2." + now;
 
-        CloseableHttpResponse response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                RecordUtil.createDefaultJsonRecord(RECORD_ID1, KIND, LEGAL_TAG), "");
-        assertEquals(HttpStatus.SC_CREATED, response.getCode());
+    createLegalTag(LEGAL_TAG);
+    createLegalTag(LEGAL_TAG_TO_BE_PATCHED);
 
-        response = TestUtils.send("records", "PUT", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()),
-                RecordUtil.createDefaultJsonRecord(RECORD_ID2, KIND, LEGAL_TAG), "");
-        assertEquals(HttpStatus.SC_CREATED, response.getCode());
+    HttpResponse<CreateRecordsResponse> response =
+        storageClient.putRecords(withTestAcl(RecordUtil.createDefaultRecords(RECORD_ID1, KIND, LEGAL_TAG)));
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
+
+    response = storageClient.putRecords(withTestAcl(RecordUtil.createDefaultRecords(RECORD_ID2, KIND, LEGAL_TAG)));
+    assertEquals(HttpStatus.SC_CREATED, response.statusCode());
+  }
+
+  @Test
+  public void should_updateOnlyMetadata_whenOnlyMetadataIsPatched() {
+    List<String> records = new ArrayList<>();
+    records.add(RECORD_ID1);
+    records.add(RECORD_ID2);
+    ConvertedRecords queryResponseObject = fetchRecordsForIds(records);
+    assertQueryResponse(queryResponseObject, 2);
+    String currentVersionRecord1 = queryResponseObject.records()[0].version();
+    String currentVersionRecord2 = queryResponseObject.records()[1].version();
+    assertNull(queryResponseObject.records()[0].modifyTime());
+    assertNull(queryResponseObject.records()[0].modifyUser());
+
+    HttpResponse<UpdateRecordsMetadataResponse> patchResponse = storageClient.patchRecords(
+        getPatchPayload(records, true, false),
+        Map.of("Content-Type", "application/json-patch+json"));
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
+
+    queryResponseObject = fetchRecordsForIds(records);
+    assertEquals(currentVersionRecord1, queryResponseObject.records()[0].version());
+    assertEquals(currentVersionRecord2, queryResponseObject.records()[1].version());
+    assertEquals(2, queryResponseObject.records().length);
+    assertEquals(KIND_TO_BE_PATCHED, queryResponseObject.records()[0].kind());
+    assertEquals(KIND_TO_BE_PATCHED, queryResponseObject.records()[1].kind());
+    assertEquals(getAcl(), queryResponseObject.records()[0].acl().viewers()[0]);
+    assertEquals(getAcl(), queryResponseObject.records()[1].acl().viewers()[0]);
+    assertEquals(getIntegrationTesterAcl(), queryResponseObject.records()[0].acl().owners()[0]);
+    assertEquals(getIntegrationTesterAcl(), queryResponseObject.records()[1].acl().owners()[0]);
+    assertTrue(
+        Arrays.asList(queryResponseObject.records()[0].legal().legaltags()).contains(LEGAL_TAG));
+    assertTrue(
+        Arrays.asList(queryResponseObject.records()[1].legal().legaltags()).contains(LEGAL_TAG));
+    assertTrue(Arrays.asList(queryResponseObject.records()[0].legal().legaltags())
+        .contains(LEGAL_TAG_TO_BE_PATCHED));
+    assertTrue(Arrays.asList(queryResponseObject.records()[1].legal().legaltags())
+        .contains(LEGAL_TAG_TO_BE_PATCHED));
+    Map<String, String> tags = queryResponseObject.records()[0].tags();
+    assertTrue(tags.containsKey("tag1"));
+    assertTrue(tags.containsKey("tag2"));
+    assertEquals("value1", tags.get("tag1"));
+    assertEquals("value2", tags.get("tag2"));
+    tags = queryResponseObject.records()[1].tags();
+    assertTrue(tags.containsKey("tag1"));
+    assertTrue(tags.containsKey("tag2"));
+    assertEquals("value1", tags.get("tag1"));
+    assertEquals("value2", tags.get("tag2"));
+  }
+
+  @Test
+  public void should_updateDataAndMetadataVersion_whenOnlyDataIsPatched() {
+    List<String> records = new ArrayList<>();
+    records.add(RECORD_ID1);
+    ConvertedRecords queryResponseObject = fetchRecordsForIds(records);
+    assertQueryResponse(queryResponseObject, 1);
+    String currentVersionRecord1 = queryResponseObject.records()[0].version();
+
+    HttpResponse<UpdateRecordsMetadataResponse> patchResponse = storageClient.patchRecords(
+        getPatchPayload(records, false, true),
+        Map.of("Content-Type", "application/json-patch+json"));
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
+
+    queryResponseObject = fetchRecordsForIds(records);
+    assertNotEquals(currentVersionRecord1, queryResponseObject.records()[0].version());
+    assertEquals(KIND, queryResponseObject.records()[0].kind());
+    assertTrue(queryResponseObject.records()[0].data().containsKey("data"));
+    assertEquals(Map.of("message", "test data"),
+        queryResponseObject.records()[0].data().get("data"));
+    assertQueryResponse(queryResponseObject, 1);
+  }
+
+  @Test
+  public void should_updateBothMetadataAndData_whenDataAndMetadataArePatched() {
+    List<String> records = new ArrayList<>();
+    records.add(RECORD_ID1);
+    ConvertedRecords queryResponseObject = fetchRecordsForIds(records);
+    assertQueryResponse(queryResponseObject, 1);
+    String currentVersionRecord = queryResponseObject.records()[0].version();
+
+    HttpResponse<UpdateRecordsMetadataResponse> patchResponse = storageClient.patchRecords(
+        getPatchPayload(records, true, true),
+        Map.of("Content-Type", "application/json-patch+json"));
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
+
+    queryResponseObject = fetchRecordsForIds(records);
+    assertEquals(1, queryResponseObject.records().length);
+    assertNotEquals(currentVersionRecord, queryResponseObject.records()[0].version());
+    assertEquals(KIND_TO_BE_PATCHED, queryResponseObject.records()[0].kind());
+    assertEquals(getAcl(), queryResponseObject.records()[0].acl().viewers()[0]);
+    assertEquals(getIntegrationTesterAcl(), queryResponseObject.records()[0].acl().owners()[0]);
+    assertTrue(
+        Arrays.asList(queryResponseObject.records()[0].legal().legaltags()).contains(LEGAL_TAG));
+    assertTrue(Arrays.asList(queryResponseObject.records()[0].legal().legaltags())
+        .contains(LEGAL_TAG_TO_BE_PATCHED));
+    Map<String, String> tags = queryResponseObject.records()[0].tags();
+    assertTrue(tags.containsKey("tag1"));
+    assertTrue(tags.containsKey("tag2"));
+    assertEquals("value1", tags.get("tag1"));
+    assertEquals("value2", tags.get("tag2"));
+    assertTrue(queryResponseObject.records()[0].data().containsKey("data"));
+    assertEquals(Map.of("message", "test data"),
+        queryResponseObject.records()[0].data().get("data"));
+  }
+
+  @Test
+  public void should_update_whenNumberOfPatchOperationsIsMaximum() {
+    List<String> records = new ArrayList<>();
+    records.add(RECORD_ID1);
+    ConvertedRecords queryResponseObject = fetchRecordsForIds(records);
+    assertQueryResponse(queryResponseObject, 1);
+    String currentVersionRecord = queryResponseObject.records()[0].version();
+
+    HttpResponse<UpdateRecordsMetadataResponse> patchResponse = storageClient.patchRecords(
+        getMaximumPatchOperationsPayload(records), Map.of("Content-Type", "application/json-patch+json"));
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
+
+    queryResponseObject = fetchRecordsForIds(records);
+    assertEquals(1, queryResponseObject.records().length);
+    assertEquals(currentVersionRecord, queryResponseObject.records()[0].version());
+    Map<String, String> tags = queryResponseObject.records()[0].tags();
+    assertTrue(tags.containsKey("testTag0"));
+    assertTrue(tags.containsKey("testTag99"));
+    assertEquals("value0", tags.get("testTag0"));
+    assertEquals("value99", tags.get("testTag99"));
+  }
+
+  private ConvertedRecords fetchRecordsForIds(List<String> recordIds) {
+    var fetchResponse = storageClient.queryRecordsBatchPost(
+        QueryRecordsRequest.of(recordIds.toArray(String[]::new)),
+        Map.of("frame-of-reference", "none"));
+    assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+    return fetchResponse.body();
+  }
+
+  private void assertQueryResponse(ConvertedRecords queryResponse,
+                                   int expectedRecordCount) {
+    assertEquals(expectedRecordCount, queryResponse.records().length);
+    assertEquals(getAcl(), queryResponse.records()[0].acl().viewers()[0]);
+    assertEquals(getAcl(), queryResponse.records()[0].acl().owners()[0]);
+  }
+
+  private UpdateRecordsMetadataRequest getPatchPayload(List<String> records,
+      boolean isMetaUpdate, boolean isDataUpdate) {
+    List<PatchOperation> ops = new ArrayList<>();
+    if (isMetaUpdate) {
+      ops.add(getAddTagsPatchOp());
+      ops.add(getReplaceAclOwnersPatchOp());
+      ops.add(getAddLegaltagsPatchOp());
+      ops.add(getReplaceKindPatchOp());
     }
-
-    @AfterEach
-    public void tearDown() throws Exception {
-        LegalTagUtils.delete(LEGAL_TAG, testUtils.getToken());
-        LegalTagUtils.delete(LEGAL_TAG_TO_BE_PATCHED, testUtils.getToken());
-        TestUtils.send("records/" + RECORD_ID1, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-        TestUtils.send("records/" + RECORD_ID2, "DELETE", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "");
-        this.testUtils = null;
+    if (isDataUpdate) {
+      ops.add(getReplaceDataPatchOp());
     }
+    return RecordUtil.buildMetadataPatch(records.toArray(String[]::new),
+        ops.toArray(PatchOperation[]::new));
+  }
 
-    @Test
-    public void should_updateOnlyMetadata_whenOnlyMetadataIsPatched() throws Exception {
-        List<String> records = new ArrayList<>();
-        records.add(RECORD_ID1);
-        records.add(RECORD_ID2);
-        CloseableHttpResponse queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
+  private PatchOperation getAddTagsPatchOp() {
+    Map<String, String> tagsValue = Map.of("tag1", "value1", "tag2", "value2");
+    return new PatchOperation("add", "/tags", tagsValue);
+  }
 
-        DummyRecordsHelper.ConvertedRecordsMock queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertQueryResponse(queryResponseObject, 2);
-        String currentVersionRecord1 = queryResponseObject.records[0].version;
-        String currentVersionRecord2 = queryResponseObject.records[1].version;
-        assertEquals(null, queryResponseObject.records[0].modifyTime);
-        assertEquals(null, queryResponseObject.records[0].modifyUser);
+  private PatchOperation getReplaceAclOwnersPatchOp() {
+    return new PatchOperation("replace", "/acl/owners",
+        new String[] {getIntegrationTesterAcl()});
+  }
 
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records", "PATCH", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "application/json-patch+json", getPatchPayload(records, true, false), "");
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
+  private PatchOperation getAddLegaltagsPatchOp() {
+    return new PatchOperation("add", "/legal/legaltags/-", LEGAL_TAG_TO_BE_PATCHED);
+  }
 
-        queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
+  private PatchOperation getReplaceKindPatchOp() {
+    return new PatchOperation("replace", "/kind", KIND_TO_BE_PATCHED);
+  }
 
-        queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        //modifyUser and modifyTime are not reflected appropriately, please refer to this issue https://community.opengroup.org/osdu/platform/system/storage/-/issues/171
-        assertEquals(currentVersionRecord1, queryResponseObject.records[0].version);
-        assertEquals(currentVersionRecord2, queryResponseObject.records[1].version);
-        assertEquals(2, queryResponseObject.records.length);
-        assertEquals(KIND_TO_BE_PATCHED, queryResponseObject.records[0].kind);
-        assertEquals(KIND_TO_BE_PATCHED, queryResponseObject.records[1].kind);
-        assertEquals(TestUtils.getAcl(), queryResponseObject.records[0].acl.viewers[0]);
-        assertEquals(TestUtils.getAcl(), queryResponseObject.records[1].acl.viewers[0]);
-        assertEquals(TestUtils.getIntegrationTesterAcl(), queryResponseObject.records[0].acl.owners[0]);
-        assertEquals(TestUtils.getIntegrationTesterAcl(), queryResponseObject.records[1].acl.owners[0]);
-        assertTrue(Arrays.stream(queryResponseObject.records[0].legal.legaltags).anyMatch(LEGAL_TAG::equals));
-        assertTrue(Arrays.stream(queryResponseObject.records[1].legal.legaltags).anyMatch(LEGAL_TAG::equals));
-        assertTrue(Arrays.stream(queryResponseObject.records[0].legal.legaltags).anyMatch(LEGAL_TAG_TO_BE_PATCHED::equals));
-        assertTrue(Arrays.stream(queryResponseObject.records[1].legal.legaltags).anyMatch(LEGAL_TAG_TO_BE_PATCHED::equals));
-        Map<String, String> tags = queryResponseObject.records[0].tags;
-        assertTrue(tags.containsKey("tag1"));
-        assertTrue(tags.containsKey("tag2"));
-        assertEquals("value1", tags.get("tag1"));
-        assertEquals("value2", tags.get("tag2"));
-        tags = queryResponseObject.records[1].tags;
-        assertTrue(tags.containsKey("tag1"));
-        assertTrue(tags.containsKey("tag2"));
-        assertEquals("value1", tags.get("tag1"));
-        assertEquals("value2", tags.get("tag2"));
+  private PatchOperation getReplaceDataPatchOp() {
+    Map<String, Object> innerDataValue = Map.of("message", "test data");
+    Map<String, Object> newDataValue = Map.of("data", innerDataValue);
+    return new PatchOperation("replace", "/data", newDataValue);
+  }
+
+  private UpdateRecordsMetadataRequest getMaximumPatchOperationsPayload(List<String> records) {
+    PatchOperation[] ops = new PatchOperation[MAX_OP_NUMBER];
+    for (int i = 0; i < MAX_OP_NUMBER; i++) {
+      ops[i] = new PatchOperation("add", "/tags/testTag" + i, "value" + i);
     }
-
-    @Test
-    public void should_updateDataAndMetadataVersion_whenOnlyDataIsPatched() throws Exception {
-        List<String> records = new ArrayList<>();
-        records.add(RECORD_ID1);
-        CloseableHttpResponse queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
-
-        DummyRecordsHelper.ConvertedRecordsMock queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertQueryResponse(queryResponseObject, 1);
-        String currentVersionRecord1 = queryResponseObject.records[0].version;
-
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records", "PATCH", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "application/json-patch+json", getPatchPayload(records, false, true), "");
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
-
-        queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
-
-        queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertNotEquals(currentVersionRecord1, queryResponseObject.records[0].version);
-        assertEquals(KIND, queryResponseObject.records[0].kind);
-        assertTrue(queryResponseObject.records[0].data.containsKey("data"));
-        assertTrue(queryResponseObject.records[0].data.get("data").toString().equals("{message=test data}"));
-        assertQueryResponse(queryResponseObject, 1);
-    }
-
-    @Test
-    public void should_updateBothMetadataAndData_whenDataAndMetadataArePatched() throws Exception {
-        List<String> records = new ArrayList<>();
-        records.add(RECORD_ID1);
-        CloseableHttpResponse queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
-
-        DummyRecordsHelper.ConvertedRecordsMock queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertQueryResponse(queryResponseObject, 1);
-        String currentVersionRecord = queryResponseObject.records[0].version;
-
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records", "PATCH", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "application/json-patch+json", getPatchPayload(records, true, true), "");
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
-
-        queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
-
-        queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertEquals(1, queryResponseObject.records.length);
-        assertNotEquals(currentVersionRecord, queryResponseObject.records[0].version);
-        assertEquals(KIND_TO_BE_PATCHED, queryResponseObject.records[0].kind);
-        assertEquals(TestUtils.getAcl(), queryResponseObject.records[0].acl.viewers[0]);
-        assertEquals(TestUtils.getIntegrationTesterAcl(), queryResponseObject.records[0].acl.owners[0]);
-        assertTrue(Arrays.stream(queryResponseObject.records[0].legal.legaltags).anyMatch(LEGAL_TAG::equals));
-        assertTrue(Arrays.stream(queryResponseObject.records[0].legal.legaltags).anyMatch(LEGAL_TAG_TO_BE_PATCHED::equals));
-        Map<String, String> tags = queryResponseObject.records[0].tags;
-        assertTrue(tags.containsKey("tag1"));
-        assertTrue(tags.containsKey("tag2"));
-        assertEquals("value1", tags.get("tag1"));
-        assertEquals("value2", tags.get("tag2"));
-        assertTrue(queryResponseObject.records[0].data.containsKey("data"));
-        assertTrue(queryResponseObject.records[0].data.get("data").toString().equals("{message=test data}"));
-
-    }
-
-    @Test
-    public void should_update_whenNumberOfPatchOperationsIsMaximum() throws Exception {
-        List<String> records = new ArrayList<>();
-        records.add(RECORD_ID1);
-        CloseableHttpResponse queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
-
-        DummyRecordsHelper.ConvertedRecordsMock queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertQueryResponse(queryResponseObject, 1);
-        String currentVersionRecord = queryResponseObject.records[0].version;
-
-        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records", "PATCH", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "application/json-patch+json", getMaximumPatchOperationsPayload(records), "");
-        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
-
-        queryResponse = queryRecordsResponse(records);
-        assertEquals(HttpStatus.SC_OK, queryResponse.getCode());
-
-        queryResponseObject = RECORDS_HELPER.getConvertedRecordsMockFromResponse(queryResponse);
-        assertEquals(1, queryResponseObject.records.length);
-        assertEquals(currentVersionRecord, queryResponseObject.records[0].version);
-        Map<String, String> tags = queryResponseObject.records[0].tags;
-        assertTrue(tags.containsKey("testTag0"));
-        assertTrue(tags.containsKey("testTag99"));
-        assertEquals("value0", tags.get("testTag0"));
-        assertEquals("value99", tags.get("testTag99"));
-    }
-
-    //TODO: add a test to validate same 'op' and 'path' and assert expected behavior
-
-    private CloseableHttpResponse queryRecordsResponse(List<String> recordIds) throws Exception {
-        JsonArray records = new JsonArray();
-        for (String recordId : recordIds) {
-            records.add(recordId);
-        }
-        JsonObject queryBody = new JsonObject();
-        queryBody.add("records", records);
-
-        Map<String, String> queryHeader = HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken());
-        queryHeader.put("frame-of-reference", "none");
-        return TestUtils.send("query/records:batch", "POST", queryHeader, queryBody.toString(), "");
-    }
-
-    private void assertQueryResponse(DummyRecordsHelper.ConvertedRecordsMock queryResponse, int expectedRecordCount) {
-        assertEquals(expectedRecordCount, queryResponse.records.length);
-        assertEquals(TestUtils.getAcl(), queryResponse.records[0].acl.viewers[0]);
-        assertEquals(TestUtils.getAcl(), queryResponse.records[0].acl.owners[0]);
-    }
-
-    private String getPatchPayload(List<String> records, boolean isMetaUpdate, boolean isDataUpdate) {
-        JsonArray recordsJson = new JsonArray();
-        for (String record : records) {
-            recordsJson.add(record);
-        }
-
-        JsonArray ops = new JsonArray();
-        if (isMetaUpdate) {
-            ops.add(getAddTagsPatchOp());
-            ops.add(getReplaceAclOwnersPatchOp());
-            ops.add(getAddLegaltagsPatchOp());
-            ops.add(getReplaceKindPatchOp());
-        }
-        if (isDataUpdate) {
-            ops.add(getReplaceDataPatchOp());
-        }
-
-        return getPatchrequestBody(recordsJson, ops);
-    }
-
-    private JsonObject getAddTagsPatchOp() {
-        JsonObject tagsValue = new JsonObject();
-        tagsValue.addProperty("tag1", "value1");
-        tagsValue.addProperty("tag2", "value2");
-        JsonObject addTagsPatch = new JsonObject();
-        addTagsPatch.addProperty("op", "add");
-        addTagsPatch.addProperty("path", "/tags");
-        addTagsPatch.add("value", tagsValue);
-        return addTagsPatch;
-    }
-
-    private JsonObject getReplaceAclOwnersPatchOp() {
-        JsonArray newAclValue = new JsonArray();
-        newAclValue.add(TestUtils.getIntegrationTesterAcl());
-        JsonObject replaceAclPatch = new JsonObject();
-        replaceAclPatch.addProperty("op", "replace");
-        replaceAclPatch.addProperty("path", "/acl/owners");
-        replaceAclPatch.add("value", newAclValue);
-        return replaceAclPatch;
-    }
-
-    private JsonObject getAddLegaltagsPatchOp() {
-        JsonObject replaceAclPatch = new JsonObject();
-        replaceAclPatch.addProperty("op", "add");
-        replaceAclPatch.addProperty("path", "/legal/legaltags/-");
-        replaceAclPatch.addProperty("value", LEGAL_TAG_TO_BE_PATCHED);
-        return replaceAclPatch;
-    }
-
-    private JsonObject getReplaceKindPatchOp() {
-        JsonObject replaeKindPatch = new JsonObject();
-        replaeKindPatch.addProperty("op", "replace");
-        replaeKindPatch.addProperty("path", "/kind");
-        replaeKindPatch.addProperty("value", KIND_TO_BE_PATCHED);
-        return replaeKindPatch;
-    }
-
-    private JsonObject getReplaceDataPatchOp() {
-        JsonObject newDataValue = new JsonObject();
-        JsonObject innerDataValue = new JsonObject();
-        innerDataValue.addProperty("message", "test data");
-        newDataValue.add("data", innerDataValue);
-        JsonObject replaceDataPatch = new JsonObject();
-        replaceDataPatch.addProperty("op", "replace");
-        replaceDataPatch.addProperty("path", "/data");
-        replaceDataPatch.add("value", newDataValue);
-        return replaceDataPatch;
-    }
-
-    private String getMaximumPatchOperationsPayload(List<String> records) {
-        JsonArray recordsJson = new JsonArray();
-        for (String record : records) {
-            recordsJson.add(record);
-        }
-        JsonArray ops = new JsonArray();
-        for (int i = 0; i < MAX_OP_NUMBER; i++) {
-            JsonObject addTagOperation = new JsonObject();
-            addTagOperation.addProperty("op", "add");
-            addTagOperation.addProperty("path", "/tags/testTag" + i);
-            addTagOperation.addProperty("value", "value" + i);
-            ops.add(addTagOperation);
-        }
-        return getPatchrequestBody(recordsJson, ops);
-    }
-
-    private String getPatchrequestBody(JsonArray recordsJson, JsonArray ops) {
-        JsonObject query = new JsonObject();
-        query.add("ids", recordsJson);
-
-        JsonObject updateBody = new JsonObject();
-        updateBody.add("query", query);
-        updateBody.add("ops", ops);
-
-        return updateBody.toString();
-    }
-
+    return RecordUtil.buildMetadataPatch(records.toArray(String[]::new), ops);
+  }
 }

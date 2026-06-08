@@ -18,104 +18,14 @@
 package org.opengroup.osdu.storage.query;
 
 import java.util.List;
+import org.opengroup.osdu.core.test.auth.UserType;
+import org.opengroup.osdu.core.test.base.BaseGetInfoAcceptanceTests;
+import org.opengroup.osdu.core.test.service.ServiceType;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+public final class GetQueryInfoIntegrationTest extends BaseGetInfoAcceptanceTests {
 
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
-import org.opengroup.osdu.storage.util.VersionInfoUtils;
-import org.opengroup.osdu.core.common.model.info.VersionInfo;
-import org.opengroup.osdu.core.common.model.info.FeatureFlagStateResolver.FeatureFlagState;
-
-public final class GetQueryInfoIntegrationTest extends TestBase {
-
-  // Feature flag property constant - matches the value used in service configuration
-  private static final String EXPOSE_FEATUREFLAG_ENABLED_PROPERTY = "expose_featureflag.enabled";
-
-  private static final VersionInfoUtils VERSION_INFO_UTILS = new VersionInfoUtils();
-  private static final TokenTestUtils TOKEN_TEST_UTILS = new TokenTestUtils();
-  
-  // Expected feature flags for storage service
-  private static final String[] expectedFeatureFlags = {
-      "collaborations-enabled",
-      "featureFlag.opa.enabled"
-  };
-
-  @BeforeAll
-  public static void classSetup() throws Exception {
-    GetQueryRecordsIntegrationTest.classSetup(TOKEN_TEST_UTILS.getToken());
-  }
-
-  @AfterAll
-  public static void classTearDown() throws Exception {
-    GetQueryRecordsIntegrationTest.classTearDown(TOKEN_TEST_UTILS.getToken());
-  }
-
-  @BeforeEach
-  @Override
-  public void setup() throws Exception {
-    this.testUtils = new TokenTestUtils();
-  }
-
-  @AfterEach
-  @Override
-  public void tearDown() throws Exception {
-    this.testUtils = null;
-  }
-
-  @Test
-  public void should_returnInfo() throws Exception {
-    CloseableHttpResponse response = TestUtils
-        .send("info", "GET", HeaderUtils.getHeaders(TenantUtils.getTenantName(),
-            testUtils.getToken()), "", "");
-    assertEquals(HttpStatus.SC_OK, response.getCode());
-
-    VersionInfo responseObject = VERSION_INFO_UTILS.getVersionInfoFromResponse(response);
-
-    assertNotNull(responseObject.getGroupId());
-    assertNotNull(responseObject.getArtifactId());
-    assertNotNull(responseObject.getVersion());
-    assertNotNull(responseObject.getBuildTime());
-    assertNotNull(responseObject.getBranch());
-    assertNotNull(responseObject.getCommitId());
-    assertNotNull(responseObject.getCommitMessage());
-
-    List<FeatureFlagState> featureFlagStates = responseObject.getFeatureFlagStates();
-    
-    // Read the actual configuration property value to validate behavior alignment
-    // Check system property first, then fall back to environment variable
-    String featureFlagExposeEnabledProperty = System.getProperty(EXPOSE_FEATUREFLAG_ENABLED_PROPERTY);
-    if (featureFlagExposeEnabledProperty == null) {
-        featureFlagExposeEnabledProperty = System.getenv("EXPOSE_FEATUREFLAG_ENABLED");
-    }
-    boolean isFeatureFlagExposureEnabled = featureFlagExposeEnabledProperty == null || !"false".equalsIgnoreCase(featureFlagExposeEnabledProperty);
-    
-    if (!isFeatureFlagExposureEnabled)
-    {
-      assertNull(featureFlagStates);
-    }
-    else
-    {
-      assertNotNull(featureFlagStates);
-      assertFalse(featureFlagStates.isEmpty());
-
-      for (String ffName : expectedFeatureFlags){
-        assertTrue(featureFlagStates.stream().anyMatch(ffState -> ffState.getName().equals(ffName)));
-      }
-    }
+  public GetQueryInfoIntegrationTest() {
+    super(UserType.PRIVILEGED_USER, ServiceType.STORAGE_V2,
+        List.of("collaborations-enabled", "featureFlag.opa.enabled"));
   }
 }

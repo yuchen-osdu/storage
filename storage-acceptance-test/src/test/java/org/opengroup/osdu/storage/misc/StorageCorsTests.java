@@ -18,53 +18,48 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.opengroup.osdu.storage.util.HeaderUtils;
-import org.opengroup.osdu.storage.util.TenantUtils;
-import org.opengroup.osdu.storage.util.TestBase;
-import org.opengroup.osdu.storage.util.TestUtils;
-import org.opengroup.osdu.storage.util.TokenTestUtils;
+import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 
-public final class StorageCorsTests extends TestBase {
+public final class StorageCorsTests extends BaseStorageAcceptanceTest {
 
-    @BeforeEach
-    @Override
-    public void setup() throws Exception {
-        this.testUtils = new TokenTestUtils();
+  @Test
+  @Disabled
+  public void should_returnProperStatusCodeAndResponseHeaders_when_sendingPreflightOptionsRequest() {
+    HttpResponse<Void> response = storageClient.queryKindsOptions("?limit=1");
+    assertEquals(HttpStatus.SC_OK, response.statusCode());
+
+    assertEquals("*", getHeader(response, "Access-Control-Allow-Origin"));
+    assertEquals(
+        "origin, content-type, accept, authorization, data-partition-id, correlation-id, appkey",
+        getHeader(response, "Access-Control-Allow-Headers"));
+    assertEquals("GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
+        getHeader(response, "Access-Control-Allow-Methods"));
+    assertEquals("true", getHeader(response, "Access-Control-Allow-Credentials"));
+    assertEquals("DENY", getHeader(response, "X-Frame-Options"));
+    assertEquals("1; mode=block", getHeader(response, "X-XSS-Protection"));
+    assertEquals("nosniff", getHeader(response, "X-Content-Type-Options"));
+    assertEquals("no-cache, no-store, must-revalidate", getHeader(response, "Cache-Control"));
+    assertEquals("default-src 'self'", getHeader(response, "Content-Security-Policy"));
+    String strictTransportSecurity = getHeader(response, "Strict-Transport-Security");
+    assertNotNull(strictTransportSecurity);
+    assertNotNull(strictTransportSecurity);
+    assertTrue(strictTransportSecurity.contains("max-age=31536000"));
+    assertTrue(strictTransportSecurity.contains("includeSubDomains"));
+    assertEquals("0", getHeader(response, "Expires"));
+    assertNotNull(getHeader(response, "correlation-id"));
+  }
+
+  private static String getHeader(HttpResponse<Void> response, String name) {
+    for (Header header : response.headers()) {
+      if (header.getName().equalsIgnoreCase(name)) {
+        return header.getValue();
+      }
     }
-
-    @AfterEach
-    @Override
-    public void tearDown() throws Exception {
-        this.testUtils = null;
-    }
-
-    @Test
-    @Disabled
-    public void should_returnProperStatusCodeAndResponseHeaders_when_sendingPreflightOptionsRequest() throws Exception {
-        CloseableHttpResponse response = TestUtils.send("query/kinds", "OPTIONS", HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken()), "", "?limit=1");
-        assertEquals(HttpStatus.SC_OK, response.getCode());
-
-        assertEquals("*", response.getHeaders("Access-Control-Allow-Origin")[0]);
-        assertEquals(
-                "origin, content-type, accept, authorization, data-partition-id, correlation-id, appkey",
-                response.getHeaders("Access-Control-Allow-Headers")[0]);
-        assertEquals("GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-                response.getHeaders("Access-Control-Allow-Methods")[0]);
-        assertEquals("true", response.getHeaders("Access-Control-Allow-Credentials")[0]);
-        assertEquals("DENY", response.getHeaders("X-Frame-Options")[0]);
-        assertEquals("1; mode=block", response.getHeaders("X-XSS-Protection")[0]);
-        assertEquals("nosniff", response.getHeaders("X-Content-Type-Options")[0]);
-        assertEquals("no-cache, no-store, must-revalidate", response.getHeaders("Cache-Control")[0]);
-        assertEquals("default-src 'self'", response.getHeaders("Content-Security-Policy")[0]);
-        assertTrue(response.getHeaders("Strict-Transport-Security")[0].getValue().contains("max-age=31536000"));
-        assertTrue(response.getHeaders("Strict-Transport-Security")[0].getValue().contains("includeSubDomains"));
-        assertEquals("0", response.getHeaders("Expires")[0]);
-        assertNotNull(response.getHeaders("correlation-id")[0]);
-    }
+    return null;
+  }
 }
