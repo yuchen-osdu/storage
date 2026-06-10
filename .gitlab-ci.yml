@@ -75,6 +75,9 @@ include:
   - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/gc-one-pipeline.yml"
 
+  - project: "osdu/platform/ci-cd-pipelines"
+    file: "reporting/schemathesis.yml"
+
   - local: "devops/gc/pipeline/override-stages.yml"
 
 # disable the eslint scanner
@@ -127,3 +130,5 @@ fossa-analyze:
 fossa-check-notice:
   image: $CI_REGISTRY/divido/fossa-with-cache:v0.9-jdk17
 
+schemathesis-tests:
+  extends: .schemathesis-tests-template
