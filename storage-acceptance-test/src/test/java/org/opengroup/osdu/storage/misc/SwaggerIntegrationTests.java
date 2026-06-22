@@ -18,6 +18,7 @@
 package org.opengroup.osdu.storage.misc;
 
 import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.OpenApiSpec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -38,7 +39,7 @@ public final class SwaggerIntegrationTests extends BaseStorageAcceptanceTest {
 
   @Test
   public void shouldReturn200_whenSwaggerApiDocsIsCalled() {
-    HttpResponse<Void> response = storageClient.getApiDocs();
+    HttpResponse<OpenApiSpec> response = storageClient.getApiDocs();
     assertEquals(HttpStatus.SC_OK, response.statusCode());
   }
 }

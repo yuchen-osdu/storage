@@ -1,5 +1,4 @@
 {
-  "enabled": true,
   "PRIVILEGED_USER": [
     "users",
     "service.entitlements.user",
