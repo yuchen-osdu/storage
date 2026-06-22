@@ -30,9 +30,8 @@
         <allure.version>2.31.0</allure.version>
         <aspectj.version>1.9.22</aspectj.version>
         <log4j.version>2.23.0</log4j.version>
-        <jackson.version>2.21.1</jackson.version>
-        <jackson-databind.version>2.21.1</jackson-databind.version>
-        <os-core-common.version>6.0.0</os-core-common.version>
+        <jackson.version>2.21.2</jackson.version>
+        <jackson-databind.version>2.21.2</jackson-databind.version>
         <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
         <argLine>
             --add-opens java.base/java.lang=ALL-UNNAMED
@@ -55,7 +54,7 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-core-test</artifactId>
-            <version>0.1.6</version>
+            <version>0.2.0</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

@@ -15,12 +15,25 @@
     </parent>
 
     <properties>
-        <maven.compiler.release>17</maven.compiler.release>
-        <jackson.version>2.21.1</jackson.version>
+        <jackson.version>2.21.2</jackson.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!--
+                netty-bom must be imported BEFORE spring-boot-dependencies (Maven: first-declared
+                BOM wins). Required because lettuce-core 7.5.2 needs Netty 4.2.x but Spring Boot
+                3.5.x BOM pins 4.1.x (CVE-2025-58057 et al). The parent storage/pom.xml also
+                declares this, but this module re-imports spring-boot-dependencies, so we must
+                re-import netty-bom here too to keep the override winning.
+            -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Jackson override: Spring Boot 3.5.8 and other artifacts provides 2.19.4, we need 2.21.1 for GHSA-72hv-8253-57qq -->
             <!-- Maybe remove this override when Spring Boot BOM updates to Jackson >= 2.21.1 -->
             <dependency>
@@ -38,8 +51,9 @@
             <dependency>
                 <groupId>org.springframework</groupId>
                 <artifactId>spring-framework-bom</artifactId>
-                <version>${spring-framework-version}</version>
+                <version>${spring-framework.version}</version>
                 <type>pom</type>
+                <scope>import</scope>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -77,6 +91,14 @@
             <artifactId>core-plus-common-lib</artifactId>
             <version>0.27.0-rc3</version>
         </dependency>
+        <!--
+            os-core-common declares lettuce-core as provided. core-plus is packaged
+            as a self-contained Spring Boot jar, so include Lettuce explicitly.
+        -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+        </dependency>
         <!--    Mappers    -->
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
@@ -91,7 +113,7 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-obm-core</artifactId>
-            <version>0.30.0</version>
+            <version>0.30.5</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback.contrib</groupId>

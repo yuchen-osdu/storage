@@ -31,9 +31,6 @@
     <packaging>jar</packaging>
 
     <properties>
-        <java.version>17</java.version>
-        <maven.compiler.target>17</maven.compiler.target>
-        <maven.compiler.source>17</maven.compiler.source>
         <deployment.environment>dev</deployment.environment>
         <version.number>0.30.0-SNAPSHOT</version.number>
         <tomcat-core.version>10.1.48</tomcat-core.version>
@@ -78,6 +75,10 @@
              <artifactId>os-core-common</artifactId>
          </dependency>
         <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>storage-core</artifactId>
             <version>${version.number}</version>
@@ -115,17 +116,17 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
-            <version>${spring-framework-version}</version>
+            <version>${spring-framework.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webmvc</artifactId>
-            <version>${spring-framework-version}</version>
+            <version>${spring-framework.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-test</artifactId>
-            <version>${spring-framework-version}</version>
+            <version>${spring-framework.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>

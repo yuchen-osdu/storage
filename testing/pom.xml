@@ -39,11 +39,13 @@
 	</modules>
 
 	<properties>
-        <maven.compiler.release>17</maven.compiler.release>
-		<os-core-common.version>6.0.0</os-core-common.version>
+		<java.version>17</java.version>
+		<maven.compiler.release>${java.version}</maven.compiler.release>
+		<os-core-common.version>7.1.0</os-core-common.version>
+		<lombok.version>1.18.42</lombok.version>
 		<log4j.version>2.23.0</log4j.version>
-		<jackson.version>2.21.1</jackson.version>
-		<jackson-databind.version>2.21.1</jackson-databind.version>
+		<jackson.version>2.21.2</jackson.version>
+		<jackson-databind.version>2.21.2</jackson-databind.version>
 		<maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
 		<argLine>
 			--add-opens java.base/java.lang=ALL-UNNAMED
@@ -62,7 +64,7 @@
 			<dependency>
 				<groupId>com.google.code.gson</groupId>
 				<artifactId>gson</artifactId>
-				<version>2.9.1</version>
+				<version>2.10.1</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.logging.log4j</groupId>
@@ -74,8 +76,71 @@
 				<artifactId>log4j-to-slf4j</artifactId>
 				<version>${log4j.version}</version>
 			</dependency>
+			<dependency>
+				<groupId>org.opengroup.osdu</groupId>
+				<artifactId>os-core-common</artifactId>
+				<version>${os-core-common.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.projectlombok</groupId>
+				<artifactId>lombok</artifactId>
+				<version>${lombok.version}</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
+
+	<build>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>3.13.0</version>
+					<configuration>
+						<annotationProcessorPaths>
+							<path>
+								<groupId>org.projectlombok</groupId>
+								<artifactId>lombok</artifactId>
+								<version>${lombok.version}</version>
+							</path>
+						</annotationProcessorPaths>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>3.6.2</version>
+				<executions>
+					<execution>
+						<id>enforce-config-hygiene</id>
+						<phase>validate</phase>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<requireMavenVersion>
+									<version>[3.6.3,)</version>
+								</requireMavenVersion>
+								<requireJavaVersion>
+									<version>[17,)</version>
+								</requireJavaVersion>
+								<banDuplicatePomDependencyVersions/>
+								<requireSameVersions>
+									<plugins>
+										<plugin>org.apache.maven.plugins:maven-compiler-plugin</plugin>
+									</plugins>
+								</requireSameVersions>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 
 	<distributionManagement>
 		<repository>

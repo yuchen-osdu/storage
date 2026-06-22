@@ -36,45 +36,46 @@
       <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
       <!-- OSDU Versions-->
-      <os-core-common.version>6.0.0</os-core-common.version>
+      <os-core-common.version>7.1.0</os-core-common.version>
 
       <!-- Spring Versions-->
-      <spring-boot.version>3.5.8</spring-boot.version>
-      <spring-security.version>6.5.7</spring-security.version>
-      <spring-framework-version>6.2.14</spring-framework-version>
+      <spring-boot.version>3.5.14</spring-boot.version>
+      <spring-security.version>6.5.10</spring-security.version>
+      <spring-framework.version>6.2.18</spring-framework.version>
 
       <!-- Project Versions-->
       <json-smart.version>2.6.0</json-smart.version>
       <openapi.version>2.8.16</openapi.version>
       <swagger-core.version>2.2.45</swagger-core.version>
       <lombok.version>1.18.42</lombok.version>
-      <netty.version>4.1.128.Final</netty.version>
+      <!-- lettuce-core 7.x requires Netty 4.2+; Spring Boot 3.5.14 provides 4.1.x -->
+      <netty.version>4.2.14.Final</netty.version>
       <commons-codec.version>1.17.1</commons-codec.version>
+      <!-- os-core-common 7.0.0 declares lettuce-core as provided; CVE-2025-58057 requires >= 7.5.2.RELEASE -->
+      <lettuce.version>7.5.2.RELEASE</lettuce.version>
 
       <!-- Plugin Versions -->
-      <spring-boot-maven-plugin.version>3.5.8</spring-boot-maven-plugin.version>
+      <spring-boot-maven-plugin.version>${spring-boot.version}</spring-boot-maven-plugin.version>
       <git-commit-id-plugin.version>8.0.2</git-commit-id-plugin.version>
-      <jackson.version>2.21.1</jackson.version>
     </properties>
 
     <dependencyManagement>
-      <!-- BOMs listed in order of dependency hierarchy:
-        spring-boot-dependencies first as it's the parent BOM providing default dependency management,
-        spring-security-bom second as it may need to override Spring Framework versions for security purposes,
-        spring-framework-bom third as it provides core dependencies that can be safely overridden by the security BOM
-        os-core-common last as it provides the default dependencies for the project.dependency>
+      <!-- BOMs listed in import-order precedence (Maven's "first declared wins" rule for BOMs):
+        netty-bom first so it overrides Spring Boot's Netty 4.1.x with the 4.2.x line lettuce-core 7.5.2 requires (CVE-2025-58057 et al),
+        spring-boot-dependencies second as the parent BOM providing default dependency management,
+        spring-security-bom third as it may need to override Spring Framework versions for security purposes,
+        spring-framework-bom fourth as it provides core dependencies that can be safely overridden by the security BOM,
+        os-core-common last as it provides the default dependencies for the project.
       -->
 
       <!-- BOM Section Start-->
       <dependencies>
-        <!-- Jackson override: Spring Boot 3.5.8 and other artifacts provides 2.19.4, we need 2.21.1 for GHSA-72hv-8253-57qq -->
-        <!-- Maybe remove this override when Spring Boot BOM updates to Jackson >= 2.21.1 -->
         <dependency>
-          <groupId>com.fasterxml.jackson</groupId>
-          <artifactId>jackson-bom</artifactId>
-          <version>${jackson.version}</version>
-          <type>pom</type>
-          <scope>import</scope>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-bom</artifactId>
+            <version>${netty.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
         </dependency>
         <dependency>
           <groupId>org.springframework.boot</groupId>
@@ -88,27 +89,14 @@
           <artifactId>spring-security-bom</artifactId>
           <version>${spring-security.version}</version>
           <type>pom</type>
+          <scope>import</scope>
         </dependency>
         <dependency>
           <groupId>org.springframework</groupId>
           <artifactId>spring-framework-bom</artifactId>
-          <version>${spring-framework-version}</version>
-          <type>pom</type>
-        </dependency>
-        <!-- Core CommonBOM Override Section End -->
-        <dependency>
-          <groupId>org.opengroup.osdu</groupId>
-          <artifactId>os-core-common</artifactId>
-          <version>${os-core-common.version}</version>
+          <version>${spring-framework.version}</version>
           <type>pom</type>
           <scope>import</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-bom</artifactId>
-            <version>${netty.version}</version>
-            <type>pom</type>
-            <scope>import</scope>
         </dependency>
         <!-- BOM Section End-->
 
@@ -146,6 +134,11 @@
             <groupId>io.swagger.core.v3</groupId>
             <artifactId>swagger-annotations-jakarta</artifactId>
             <version>${swagger-core.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>${lettuce.version}</version>
         </dependency>
       </dependencies>
     </dependencyManagement>
@@ -205,6 +198,55 @@
         </plugins>
       </pluginManagement>
       <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>3.6.2</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.opengroup.osdu</groupId>
+              <artifactId>osdu-enforcer-rules</artifactId>
+              <version>1.0.1</version>
+            </dependency>
+          </dependencies>
+          <executions>
+            <execution>
+              <id>enforce-config-hygiene</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <requireMavenVersion>
+                    <version>[3.6.3,)</version>
+                  </requireMavenVersion>
+                  <requireJavaVersion>
+                    <version>[17,)</version>
+                  </requireJavaVersion>
+                  <banDuplicatePomDependencyVersions/>
+                  <requireSameVersions>
+                    <plugins>
+                      <plugin>org.apache.maven.plugins:maven-compiler-plugin</plugin>
+                    </plugins>
+                  </requireSameVersions>
+                </rules>
+              </configuration>
+            </execution>
+            <execution>
+              <id>enforce-test-execution</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <enforceTestExecution/>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
         <plugin>
           <groupId>org.springframework.boot</groupId>
           <artifactId>spring-boot-maven-plugin</artifactId>
@@ -301,6 +343,13 @@
         <url>${repo.releases.url}</url>
       </repository>
     </repositories>
+
+    <pluginRepositories>
+      <pluginRepository>
+        <id>${repo.releases.id}</id>
+        <url>${repo.releases.url}</url>
+      </pluginRepository>
+    </pluginRepositories>
 
     <distributionManagement>
       <repository>
