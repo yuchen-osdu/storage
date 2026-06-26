@@ -711,4 +711,6 @@ jobs:
           env_map: ${{ vars.ACCEPTANCE_TEST_ENV_MAP || '{}' }}
           dependencies: ${{ vars.ACCEPTANCE_TEST_DEPENDENCIES || '{}' }}
           maven_profile: ${{ vars.MAVEN_PROFILE || '' }}
+          maven_goal: ${{ vars.MAVEN_GOAL || 'verify' }}
+          root_token_env: ${{ vars.ROOT_TOKEN_ENV || 'ROOT_USER_TOKEN' }}
           expected_digest: ${{ needs.deploy.outputs.deployed_digest }}
