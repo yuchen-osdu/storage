@@ -29,6 +29,7 @@
     </parent>
 
     <properties>
+        <maven.compiler.release>17</maven.compiler.release>
         <argLine>
             --add-opens=java.base/java.util=ALL-UNNAMED
             --add-opens java.base/java.lang=ALL-UNNAMED
@@ -62,25 +63,9 @@
             <artifactId>os-core-common</artifactId>
         </dependency>
 
-        <!--
-            storage-core production code imports io.lettuce.core.RedisException directly.
-            os-core-common 7.0.0 declares lettuce-core as provided scope, which Maven does
-            NOT propagate transitively, so consumers of os-core-common must declare lettuce-core
-            themselves. Library-level scope=provided so deployable consumers (storage-core-plus,
-            storage-aws, etc.) control the runtime version.
-        -->
-        <dependency>
-            <groupId>io.lettuce</groupId>
-            <artifactId>lettuce-core</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
-            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
@@ -178,6 +163,12 @@
 			<version>5.11.0</version>
 			<scope>test</scope>
 		</dependency>
+        <!--<dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>-->
 
     </dependencies>
 
@@ -186,7 +177,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${spring-boot-maven-plugin.version}</version>
+                <version>3.2.3</version>
                 <executions>
                     <execution>
                         <goals>
