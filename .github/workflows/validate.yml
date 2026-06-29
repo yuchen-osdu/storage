@@ -713,4 +713,6 @@ jobs:
           maven_profile: ${{ vars.MAVEN_PROFILE || '' }}
           maven_goal: ${{ vars.MAVEN_GOAL || 'verify' }}
           root_token_env: ${{ vars.ROOT_TOKEN_ENV || 'ROOT_USER_TOKEN' }}
+          timeout_minutes: ${{ vars.IT_TIMEOUT_MINUTES || '25' }}
+          max_attempts: ${{ vars.IT_MAX_ATTEMPTS || '2' }}
           expected_digest: ${{ needs.deploy.outputs.deployed_digest }}
