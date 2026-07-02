@@ -109,6 +109,7 @@ The following software have components provided under the terms of this license:
 - GAX (Google Api eXtensions) for Java (HTTP JSON) (from <https://repo1.maven.org/maven2/com/google/api/gax-httpjson>, https://github.com/googleapis/sdk-platform-java, https://repo1.maven.org/maven2/com/google/api/gax-httpjson)
 - GAX (Google Api eXtensions) for Java (gRPC) (from <https://repo1.maven.org/maven2/com/google/api/gax-grpc>, https://github.com/googleapis/sdk-platform-java, https://repo1.maven.org/maven2/com/google/api/gax-grpc)
 - GSON extensions to the Google HTTP Client Library for Java. (from https://github.com/googleapis/google-http-java-client, https://repo1.maven.org/maven2/com/google/http-client/google-http-client-gson)
+- Google Android Annotations Library (from http://source.android.com/)
 - Google APIs Client Library for Java (from https://github.com/googleapis/google-api-java-client, https://repo1.maven.org/maven2/com/google/api-client/google-api-client)
 - Google App Engine extensions to the Google HTTP Client Library for Java. (from https://github.com/googleapis/google-http-java-client, https://repo1.maven.org/maven2/com/google/http-client/google-http-client-appengine)
 - Google Auth Library for Java - Credentials (from https://github.com/googleapis/google-cloud-java, https://repo1.maven.org/maven2/com/google/auth/google-auth-library-credentials)
@@ -328,6 +329,7 @@ The following software have components provided under the terms of this license:
 
 - Apache Log4j Core (from https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core)
 - HdrHistogram (from http://hdrhistogram.github.io/HdrHistogram/)
+- Jackson-core (from http://wiki.fasterxml.com/JacksonHome, https://github.com/FasterXML/jackson-core)
 - Jodd Util (from https://util.jodd.org/)
 - LatencyUtils (from http://latencyutils.github.io/LatencyUtils/)
 - MinLog (from https://github.com/EsotericSoftware/minlog)
@@ -378,6 +380,13 @@ BouncyCastle
 The following software have components provided under the terms of this license:
 
 - Bouncy Castle Provider (from http://www.bouncycastle.org/java.html, https://www.bouncycastle.org/download/bouncy-castle-java/, https://www.bouncycastle.org/java.html)
+
+========================================================================
+BSL-1.0
+========================================================================
+The following software have components provided under the terms of this license:
+
+- Jackson-core (from http://wiki.fasterxml.com/JacksonHome, https://github.com/FasterXML/jackson-core)
 
 ========================================================================
 CC-BY-2.5
