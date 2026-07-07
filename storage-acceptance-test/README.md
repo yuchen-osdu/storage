@@ -76,8 +76,6 @@ Integration accounts must have the roles listed below. `PRIVILEGED_USER` and `NO
 | service.storage.viewer     |                           | service.legal.viewer      |
 | service.legal.admin        |                           |                           |
 | service.legal.editor       |                           |                           |
-| data.test1                 |                           |                           |
-| data.integration.test      |                           |                           |
 
 `NO_ACCESS_USER` is used by `RecordAccessAuthorizationTests`. `ROOT_USER` is used by `DataRootAccessTest`.
 
