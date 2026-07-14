@@ -14,6 +14,7 @@
 
 package org.opengroup.osdu.storage.records;
 
+import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
 
@@ -29,17 +30,42 @@ import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 import org.opengroup.osdu.storage.util.RecordUtil;
 import org.opengroup.osdu.storage.util.TestUtils;
+import org.junit.jupiter.api.BeforeEach;
 
 /**
  * Base class for storage records acceptance tests.
  */
 public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTest {
 
+  // Dynamically created integration test group
+  protected String integrationTestGroupEmail;
+
   protected BaseRecordsAcceptanceTest() {
   }
 
   protected BaseRecordsAcceptanceTest(List<UserType> userTypes) {
     super(userTypes);
+  }
+
+  @Override
+  @BeforeEach
+  protected void setup() throws Exception {
+    super.setup();
+    // Create integration test group dynamically
+    try {
+      var createGroupResponse = entitlementsClient.createGroup(
+          "data.integration.test", "Integration test group for storage acceptance tests",
+          UserType.PRIVILEGED_USER);
+      assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+      integrationTestGroupEmail = createGroupResponse.body().email();
+    } catch (ClientException ex) {
+      // Group already exists - construct the email manually
+      if (ex.getStatusCode() == HttpStatus.SC_CONFLICT) {
+        integrationTestGroupEmail = String.format("data.integration.test@%s", getAclSuffix());
+      } else {
+        throw ex;
+      }
+    }
   }
 
   protected static final String COLLABORATION_HEADER = "x-collaboration";
@@ -49,7 +75,7 @@ public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTes
   }
 
   protected String getIntegrationTesterAcl() {
-    return String.format("data.integration.test@%s", getAclSuffix());
+    return integrationTestGroupEmail;
   }
 
   protected StorageRecord[] withTestAcl(StorageRecord[] records) {

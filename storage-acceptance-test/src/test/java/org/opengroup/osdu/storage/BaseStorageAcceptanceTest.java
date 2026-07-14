@@ -4,6 +4,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import com.google.gson.Gson;
 import org.opengroup.osdu.core.test.auth.UserType;
 import org.opengroup.osdu.core.test.base.BaseAcceptanceTests;
+import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.EntitlementsClient;
 import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.core.test.client.LegalTagsClient;
@@ -24,6 +25,7 @@ import java.util.List;
 
 import org.apache.hc.core5.http.Method;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
 
@@ -57,6 +59,9 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   protected final EntitlementsClient entitlementsClient;
   protected final StorageClient storageClient;
 
+  // Dynamically created test groups
+  protected String testGroupEmail;
+
   protected BaseStorageAcceptanceTest() {
     this(DEFAULT_USER_TYPES);
   }
@@ -69,8 +74,24 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   }
 
   @Override
+  @BeforeEach
   protected void setup() throws Exception {
     // Shared infrastructure is initialized in the BaseAcceptanceTests constructor.
+    // Create test group dynamically
+    try {
+      var createGroupResponse = entitlementsClient.createGroup(
+          "data.test1", "Test group for storage acceptance tests",
+          UserType.PRIVILEGED_USER);
+      assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+      testGroupEmail = createGroupResponse.body().email();
+    } catch (ClientException ex) {
+      // Group already exists - construct the email manually
+      if (ex.getStatusCode() == HttpStatus.SC_CONFLICT) {
+        testGroupEmail = String.format("data.test1@%s", getAclSuffix());
+      } else {
+        throw ex;
+      }
+    }
   }
 
   @Override
@@ -90,7 +111,7 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   }
 
   protected String getAcl() {
-    return String.format("data.test1@%s", getAclSuffix());
+    return testGroupEmail;
   }
 
   protected String createLegalTagName(String suffix) {
