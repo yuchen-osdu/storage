@@ -21,6 +21,7 @@ import static org.apache.hc.core5.http.HttpStatus.SC_OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.hc.core5.http.Method;
 import org.junit.jupiter.api.AfterEach;

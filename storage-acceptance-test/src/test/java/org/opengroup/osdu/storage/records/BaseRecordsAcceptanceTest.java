@@ -23,6 +23,7 @@ import com.google.common.base.Strings;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.apache.hc.core5.http.HttpStatus;
 import org.opengroup.osdu.core.test.auth.UserType;
 import org.opengroup.osdu.core.test.client.HttpResponse;
