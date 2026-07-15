@@ -14,7 +14,6 @@
 
 package org.opengroup.osdu.storage.records;
 
-import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
 
@@ -51,21 +50,13 @@ public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTes
   @BeforeEach
   protected void setup() throws Exception {
     super.setup();
-    // Create integration test group dynamically
-    try {
-      var createGroupResponse = entitlementsClient.createGroup(
-          "data.integration.test", "Integration test group for storage acceptance tests",
-          UserType.PRIVILEGED_USER);
-      assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
-      integrationTestGroupEmail = createGroupResponse.body().email();
-    } catch (ClientException ex) {
-      // Group already exists - construct the email manually
-      if (ex.getStatusCode() == HttpStatus.SC_CONFLICT) {
-        integrationTestGroupEmail = String.format("data.integration.test@%s", getAclSuffix());
-      } else {
-        throw ex;
-      }
-    }
+    // Create integration test group dynamically with random name to avoid conflicts
+    String randomGroupName = "integration-test-" + UUID.randomUUID().toString();
+    var createGroupResponse = entitlementsClient.createGroup(
+        randomGroupName, "Integration test group for storage acceptance tests",
+        UserType.PRIVILEGED_USER);
+    assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+    integrationTestGroupEmail = createGroupResponse.body().email();
   }
 
   protected static final String COLLABORATION_HEADER = "x-collaboration";

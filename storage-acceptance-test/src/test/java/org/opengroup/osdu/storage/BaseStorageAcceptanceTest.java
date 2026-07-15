@@ -4,7 +4,6 @@ import org.apache.hc.core5.http.HttpStatus;
 import com.google.gson.Gson;
 import org.opengroup.osdu.core.test.auth.UserType;
 import org.opengroup.osdu.core.test.base.BaseAcceptanceTests;
-import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.EntitlementsClient;
 import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.core.test.client.LegalTagsClient;
@@ -77,21 +76,13 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   @BeforeEach
   protected void setup() throws Exception {
     // Shared infrastructure is initialized in the BaseAcceptanceTests constructor.
-    // Create test group dynamically
-    try {
-      var createGroupResponse = entitlementsClient.createGroup(
-          "data.test1", "Test group for storage acceptance tests",
-          UserType.PRIVILEGED_USER);
-      assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
-      testGroupEmail = createGroupResponse.body().email();
-    } catch (ClientException ex) {
-      // Group already exists - construct the email manually
-      if (ex.getStatusCode() == HttpStatus.SC_CONFLICT) {
-        testGroupEmail = String.format("data.test1@%s", getAclSuffix());
-      } else {
-        throw ex;
-      }
-    }
+    // Create test group dynamically with random name to avoid conflicts
+    String randomGroupName = "test-" + UUID.randomUUID().toString();
+    var createGroupResponse = entitlementsClient.createGroup(
+        randomGroupName, "Test group for storage acceptance tests",
+        UserType.PRIVILEGED_USER);
+    assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+    testGroupEmail = createGroupResponse.body().email();
   }
 
   @Override
