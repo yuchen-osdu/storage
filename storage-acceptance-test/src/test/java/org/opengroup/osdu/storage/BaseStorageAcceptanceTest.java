@@ -79,7 +79,7 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
 
   @BeforeAll
   void createTestGroupOnce() {
-    String randomGroupName = "test-" + UUID.randomUUID();
+    String randomGroupName = "data.test-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, "Test group for storage acceptance tests");
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());

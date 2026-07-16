@@ -49,7 +49,7 @@ public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTes
 
   @BeforeAll
   void createIntegrationTestGroupOnce() {
-    String randomGroupName = "integration-test-" + UUID.randomUUID();
+    String randomGroupName = "data.inttest-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, "Integration test group for storage acceptance tests");
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());

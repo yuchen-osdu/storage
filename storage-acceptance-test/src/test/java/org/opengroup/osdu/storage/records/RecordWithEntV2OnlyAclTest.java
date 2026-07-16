@@ -41,7 +41,7 @@ public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest 
 
   @BeforeAll
   void createEntV2OnlyGroupOnce() {
-    String randomGroupName = "ent-v2-" + UUID.randomUUID();
+    String randomGroupName = "data.ent-v2-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION);
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
