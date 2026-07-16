@@ -30,7 +30,7 @@ import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 import org.opengroup.osdu.storage.util.RecordUtil;
 import org.opengroup.osdu.storage.util.TestUtils;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 
 /**
  * Base class for storage records acceptance tests.
@@ -47,12 +47,9 @@ public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTes
     super(userTypes);
   }
 
-  @Override
-  @BeforeEach
-  protected void setup() throws Exception {
-    super.setup();
-    // Create integration test group dynamically with random name to avoid conflicts
-    String randomGroupName = "integration-test-" + UUID.randomUUID().toString();
+  @BeforeAll
+  void createIntegrationTestGroupOnce() {
+    String randomGroupName = "integration-test-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, "Integration test group for storage acceptance tests",
         UserType.PRIVILEGED_USER);

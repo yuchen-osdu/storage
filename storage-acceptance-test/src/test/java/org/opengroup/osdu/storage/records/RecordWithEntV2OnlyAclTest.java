@@ -17,16 +17,16 @@
 
 package org.opengroup.osdu.storage.records;
 
-import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V_2;
 import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION;
 
+import java.util.UUID;
 import org.apache.hc.core5.http.HttpStatus;
 import org.opengroup.osdu.core.test.auth.UserType;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.opengroup.osdu.storage.util.RecordUtil;
@@ -34,9 +34,26 @@ import org.opengroup.osdu.storage.util.TestUtils;
 
 public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest {
 
+  private String entV2OnlyGroupEmail;
+
   private String LEGAL_TAG;
   private String KIND;
   private String RECORD_ID;
+
+  @BeforeAll
+  void createEntV2OnlyGroupOnce() {
+    String randomGroupName = "ent-v2-" + UUID.randomUUID();
+    var createGroupResponse = entitlementsClient.createGroup(
+        randomGroupName, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION,
+        UserType.PRIVILEGED_USER);
+    assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+    entV2OnlyGroupEmail = createGroupResponse.body().email();
+  }
+
+  @Override
+  protected String getEntV2OnlyAcl() {
+    return entV2OnlyGroupEmail;
+  }
 
   @BeforeEach
   @Override
@@ -48,15 +65,6 @@ public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest 
     RECORD_ID = getTenantId() + ":inttest:" + now;
 
     createLegalTag(LEGAL_TAG);
-    try {
-      var createGroupResponse = entitlementsClient.createGroup(
-          STORAGE_TEST_GROUP_ENT_V_2, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION,
-          UserType.PRIVILEGED_USER);
-      assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
-    } catch (ClientException ex) {
-      assertEquals(HttpStatus.SC_CONFLICT, ex.getStatusCode());
-      assertEquals("This group already exists", ex.getMessage());
-    }
   }
 
   @Test

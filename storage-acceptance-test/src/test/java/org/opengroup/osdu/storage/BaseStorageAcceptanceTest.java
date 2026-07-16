@@ -24,9 +24,13 @@ import java.util.List;
 import java.util.UUID;
 
 import org.apache.hc.core5.http.Method;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInstance;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
 
   private static final String TEST_PROPERTIES = "test.properties";
@@ -73,12 +77,9 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
     this.storageClient = new StorageClient(this.stringHttpClient, getDefaultUser());
   }
 
-  @Override
-  @BeforeEach
-  protected void setup() throws Exception {
-    // Shared infrastructure is initialized in the BaseAcceptanceTests constructor.
-    // Create test group dynamically with random name to avoid conflicts
-    String randomGroupName = "test-" + UUID.randomUUID().toString();
+  @BeforeAll
+  void createTestGroupOnce() {
+    String randomGroupName = "test-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, "Test group for storage acceptance tests",
         UserType.PRIVILEGED_USER);
@@ -87,10 +88,20 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   }
 
   @Override
+  @BeforeEach
+  protected void setup() throws Exception {
+    // Shared infrastructure is initialized in the BaseAcceptanceTests constructor.
+  }
+
+  @Override
   @AfterEach
   protected void teardown() {
     this.storageClient.teardown();
     this.legalTagClient.teardown();
+  }
+
+  @AfterAll
+  void deleteTestGroups() {
     this.entitlementsClient.teardown();
   }
 
