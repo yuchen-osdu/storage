@@ -94,8 +94,7 @@ public final class DataRootAccessTest extends BaseRecordsAcceptanceTest {
   private String createDataGroup() {
     var entitlementsGroup = entitlementsClient.createGroup(
         DATA_GROUP_ID,
-        "Used in ACL, to test that users.data.root have access to any data group.",
-        UserType.PRIVILEGED_USER);
+        "Used in ACL, to test that users.data.root have access to any data group.");
     assertEquals(HttpStatus.SC_CREATED, entitlementsGroup.statusCode());
     return entitlementsGroup.body().email();
   }

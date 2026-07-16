@@ -73,7 +73,7 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   protected BaseStorageAcceptanceTest(List<UserType> userTypes) {
     super(userTypes, DEFAULT_SERVICES);
     this.legalTagClient = new LegalTagsClient(this.stringHttpClient, getDefaultUser());
-    this.entitlementsClient = new EntitlementsClient(this.stringHttpClient);
+    this.entitlementsClient = new EntitlementsClient(this.stringHttpClient, getDefaultUser());
     this.storageClient = new StorageClient(this.stringHttpClient, getDefaultUser());
   }
 
@@ -81,8 +81,7 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   void createTestGroupOnce() {
     String randomGroupName = "test-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
-        randomGroupName, "Test group for storage acceptance tests",
-        UserType.PRIVILEGED_USER);
+        randomGroupName, "Test group for storage acceptance tests");
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     testGroupEmail = createGroupResponse.body().email();
   }

@@ -25,7 +25,6 @@ import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V
 
 import java.util.UUID;
 import org.apache.hc.core5.http.HttpStatus;
-import org.opengroup.osdu.core.test.auth.UserType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,8 +43,7 @@ public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest 
   void createEntV2OnlyGroupOnce() {
     String randomGroupName = "ent-v2-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
-        randomGroupName, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION,
-        UserType.PRIVILEGED_USER);
+        randomGroupName, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION);
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     entV2OnlyGroupEmail = createGroupResponse.body().email();
   }
