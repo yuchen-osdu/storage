@@ -78,12 +78,15 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   }
 
   @BeforeAll
-  void createTestGroupOnce() {
+  void createTestGroupOnce() throws InterruptedException {
     String randomGroupName = "data.test-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, "Test group for storage acceptance tests");
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     testGroupEmail = createGroupResponse.body().email();
+    // Allow time for the newly created group to propagate across the entitlements service
+    // so the storage service can validate it when creating records.
+    Thread.sleep(3000);
   }
 
   @Override

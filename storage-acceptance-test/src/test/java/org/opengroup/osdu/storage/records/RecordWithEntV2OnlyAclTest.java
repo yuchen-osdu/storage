@@ -40,12 +40,13 @@ public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest 
   private String RECORD_ID;
 
   @BeforeAll
-  void createEntV2OnlyGroupOnce() {
+  void createEntV2OnlyGroupOnce() throws InterruptedException {
     String randomGroupName = "data.ent-v2-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION);
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     entV2OnlyGroupEmail = createGroupResponse.body().email();
+    Thread.sleep(3000);
   }
 
   @Override

@@ -48,12 +48,13 @@ public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTes
   }
 
   @BeforeAll
-  void createIntegrationTestGroupOnce() {
+  void createIntegrationTestGroupOnce() throws InterruptedException {
     String randomGroupName = "data.inttest-" + UUID.randomUUID();
     var createGroupResponse = entitlementsClient.createGroup(
         randomGroupName, "Integration test group for storage acceptance tests");
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     integrationTestGroupEmail = createGroupResponse.body().email();
+    Thread.sleep(3000);
   }
 
   protected static final String COLLABORATION_HEADER = "x-collaboration";
