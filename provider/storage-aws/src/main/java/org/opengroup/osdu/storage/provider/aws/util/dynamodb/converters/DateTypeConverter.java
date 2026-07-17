@@ -35,11 +35,15 @@ import java.util.Date;
 // Converts Date Object to a string and vice-versa.
 public class DateTypeConverter implements AttributeConverter<Date> {
 
+    // SDK-instantiated via @DynamoDbConvertedBy (no-arg ctor required); constructor injection
+    // would break BeanTableSchema reflection, so these fields must use field injection.
     @Inject
-    private JaxRsDpsLog logger; // NOSONAR S6813 - SDK-instantiated via @DynamoDbConvertedBy (no-arg ctor required); constructor injection would break BeanTableSchema reflection.
+    @SuppressWarnings("java:S6813")
+    private JaxRsDpsLog logger;
 
     @Inject
-    private ObjectMapper objectMapper = new ObjectMapper(); // NOSONAR S6813 - SDK-instantiated via @DynamoDbConvertedBy (no-arg ctor required); constructor injection would break BeanTableSchema reflection.
+    @SuppressWarnings("java:S6813")
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     // Converts Date to a JSON string (In form of AttributeValue) for DynamoDB
     @Override
