@@ -84,9 +84,11 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
         randomGroupName, "Test group for storage acceptance tests");
     assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     testGroupEmail = createGroupResponse.body().email();
-    // Allow time for the newly created group to propagate across the entitlements service
-    // so the storage service can validate it when creating records.
-    Thread.sleep(3000);
+    // The storage service caches the requesting user's group list in Redis with a 30-second TTL.
+    // If the cache was populated by a previous test class, the newly created group won't be in it.
+    // Sleeping 31 seconds guarantees the cache has expired before the first putRecords call,
+    // forcing a fresh fetch that includes the new group.
+    Thread.sleep(31000);
   }
 
   @Override
