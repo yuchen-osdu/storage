@@ -64,7 +64,7 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   protected BaseStorageAcceptanceTest(List<UserType> userTypes) {
     super(userTypes, DEFAULT_SERVICES);
     this.legalTagClient = new LegalTagsClient(this.stringHttpClient, getDefaultUser());
-    this.entitlementsClient = new EntitlementsClient(this.stringHttpClient);
+    this.entitlementsClient = new EntitlementsClient(this.stringHttpClient, getDefaultUser());
     this.storageClient = new StorageClient(this.stringHttpClient, getDefaultUser());
   }
 

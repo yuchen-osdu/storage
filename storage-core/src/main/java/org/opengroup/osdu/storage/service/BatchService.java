@@ -20,6 +20,8 @@ import org.opengroup.osdu.core.common.model.storage.MultiRecordInfo;
 import org.opengroup.osdu.core.common.model.storage.MultiRecordRequest;
 import org.opengroup.osdu.core.common.model.storage.MultiRecordResponse;
 import org.opengroup.osdu.core.common.model.storage.DatastoreQueryResult;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
 
 import java.util.Optional;
 
@@ -32,4 +34,6 @@ public interface BatchService {
 	DatastoreQueryResult getAllKinds(String cursor, Integer limit);
 
 	DatastoreQueryResult getAllRecords(String cursorId, String kind, Integer limit, Optional<CollaborationContext> collaborationContext);
+
+	MultiRecordHeadersInfo getMultipleRecordsHeaders(MultiRecordHeadersRequest request, Optional<CollaborationContext> collaborationContext);
 }
