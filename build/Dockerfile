@@ -19,7 +19,7 @@ ARG JAVA_OPTS=""
 # requires updating the checksum (ADR-037). The agent is the arch-independent jar — no RUN, so the
 # arm64 leg stays cheap. The entrypoint attaches it only when a real connection string is set.
 ARG APPLICATIONINSIGHTS_AGENT_VERSION="3.7.8"
-ADD --checksum=sha256:e8c494f3f9a36f6b99790a4741b03f51988dc5c4244c14cc24be51874ef72e6b \
+ADD --checksum=sha256:e8c494f3f9a36f6b99790a4741b03f51988dc5c4244c14cc24be51874ef72e6b --chmod=0755 \
     https://repo1.maven.org/maven2/com/microsoft/azure/applicationinsights-agent/${APPLICATIONINSIGHTS_AGENT_VERSION}/applicationinsights-agent-${APPLICATIONINSIGHTS_AGENT_VERSION}.jar \
     /opt/agents/applicationinsights-agent.jar
 
