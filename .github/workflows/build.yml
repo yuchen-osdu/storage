@@ -93,6 +93,9 @@ jobs:
         uses: ./.github/actions/java-build
         with:
           gitlab_token: ${{ secrets.GITLAB_TOKEN }}
+          # Match validate.yml so service-specific provider scopes are honored
+          # consistently in both required and feature-branch builds.
+          maven_profile: ${{ vars.MAVEN_PROFILE || 'core,azure' }}
 
   code-coverage:
     name: "📊 Code Coverage"
@@ -122,21 +125,29 @@ jobs:
         env:
           MAVEN_OPTS: "-Dmaven.repo.local=$HOME/.m2/repository"
           COMMUNITY_MAVEN_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          MAVEN_PROFILE: ${{ vars.MAVEN_PROFILE || 'core,azure' }}
+          SIS_DATA: ${{ github.workspace }}/apachesis_setup/SIS_DATA
         run: |
           # Set up Maven CLI options
-          MAVEN_CLI_OPTS="--batch-mode -Drevision=${GITHUB_REF_NAME}-SNAPSHOT"
+          SAFE_REF="${GITHUB_REF_NAME//\//-}"
+          MAVEN_CLI_OPTS="--batch-mode -Drevision=${SAFE_REF}-SNAPSHOT"
           
           # Add settings file if it exists
           if [ -f ".mvn/community-maven.settings.xml" ]; then
             MAVEN_CLI_OPTS="$MAVEN_CLI_OPTS --settings=.mvn/community-maven.settings.xml"
           fi
+
+          if [ -n "${MAVEN_PROFILE:-}" ]; then
+            if [[ ! "$MAVEN_PROFILE" =~ ^[A-Za-z0-9][A-Za-z0-9._,-]*$ ]]; then
+              echo "::error::Invalid MAVEN_PROFILE '${MAVEN_PROFILE}'"
+              exit 1
+            fi
+            MAVEN_CLI_OPTS="$MAVEN_CLI_OPTS -P $MAVEN_PROFILE"
+          fi
           
           mvn $MAVEN_CLI_OPTS clean test org.jacoco:jacoco-maven-plugin:0.8.11:report
-          echo "# Test Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "## Summary" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          find . -name "index.html" -path "*/target/site/jacoco/*" -exec grep -o '<tfoot>.*</tfoot>' {} \; | sed 's/<[^>]*>//g' >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          python .github/actions/java-build/render_coverage_summary.py \
+            --root . | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: "Upload Coverage Report"
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
