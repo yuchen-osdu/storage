@@ -21,10 +21,16 @@ import static org.apache.hc.core5.http.HttpStatus.SC_OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.hc.core5.http.Method;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInstance;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
 
   private static final String TEST_PROPERTIES = "test.properties";
@@ -57,6 +63,9 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   protected final EntitlementsClient entitlementsClient;
   protected final StorageClient storageClient;
 
+  // Dynamically created test groups
+  protected String testGroupEmail;
+
   protected BaseStorageAcceptanceTest() {
     this(DEFAULT_USER_TYPES);
   }
@@ -64,11 +73,26 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   protected BaseStorageAcceptanceTest(List<UserType> userTypes) {
     super(userTypes, DEFAULT_SERVICES);
     this.legalTagClient = new LegalTagsClient(this.stringHttpClient, getDefaultUser());
-    this.entitlementsClient = new EntitlementsClient(this.stringHttpClient);
+    this.entitlementsClient = new EntitlementsClient(this.stringHttpClient, getDefaultUser());
     this.storageClient = new StorageClient(this.stringHttpClient, getDefaultUser());
   }
 
+  @BeforeAll
+  void createTestGroupOnce() throws InterruptedException {
+    String randomGroupName = "data.test-" + UUID.randomUUID();
+    var createGroupResponse = entitlementsClient.createGroup(
+        randomGroupName, "Test group for storage acceptance tests");
+    assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+    testGroupEmail = createGroupResponse.body().email();
+    // The storage service caches the requesting user's group list in Redis with a 30-second TTL.
+    // If the cache was populated by a previous test class, the newly created group won't be in it.
+    // Sleeping 31 seconds guarantees the cache has expired before the first putRecords call,
+    // forcing a fresh fetch that includes the new group.
+    Thread.sleep(31000);
+  }
+
   @Override
+  @BeforeEach
   protected void setup() throws Exception {
     // Shared infrastructure is initialized in the BaseAcceptanceTests constructor.
   }
@@ -78,6 +102,10 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   protected void teardown() {
     this.storageClient.teardown();
     this.legalTagClient.teardown();
+  }
+
+  @AfterAll
+  void deleteTestGroups() {
     this.entitlementsClient.teardown();
   }
 
@@ -90,7 +118,7 @@ public class BaseStorageAcceptanceTest extends BaseAcceptanceTests {
   }
 
   protected String getAcl() {
-    return String.format("data.test1@%s", getAclSuffix());
+    return testGroupEmail;
   }
 
   protected String createLegalTagName(String suffix) {
