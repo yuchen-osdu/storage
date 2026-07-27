@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class SomeBasicInterfaceImpl implements ISomeBasicInterface {
+    // CI/CD lane validation marker for the spi-stack-auto2 cluster.
     @Override
     public String hello() {
         return "hello from Azure!";
