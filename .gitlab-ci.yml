@@ -119,6 +119,12 @@ download_plugins:
       - $PROTECTED == '1'
       - $CIMPL_STACK == '1'
 
+download_otel_agent:
+  only:
+    variables:
+      - $PROTECTED == '1'
+      - $CIMPL_STACK == '1'
+      
 gemnasium-maven-dependency_scanning:
   variables:
     DS_JAVA_VERSION: 17
