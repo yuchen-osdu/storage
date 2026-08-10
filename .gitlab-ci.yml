@@ -27,6 +27,7 @@ variables:
   CORE_BUILD_SUBDIR: storage-core
   ACCEPTANCE_TEST_DIR: "storage-acceptance-test"
   CORE_COVERAGE_THRESHOLD: "80"
+  
 include:
   - project: "osdu/platform/ci-cd-pipelines"
     file: "standard-setup.yml"
@@ -113,7 +114,7 @@ download_plugins:
   only:
     variables:
       - $PROTECTED == '1'
-
+      
 gemnasium-maven-dependency_scanning:
   variables:
     DS_JAVA_VERSION: 17
