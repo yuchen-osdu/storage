@@ -27,10 +27,7 @@ variables:
   CORE_BUILD_SUBDIR: storage-core
   ACCEPTANCE_TEST_DIR: "storage-acceptance-test"
   CORE_COVERAGE_THRESHOLD: "80"
-  CIMPL_STACK: "1"
-  DEV_BACKUP: "1"
-  DEV: "1"
-
+  
 include:
   - project: "osdu/platform/ci-cd-pipelines"
     file: "standard-setup.yml"
@@ -117,13 +114,6 @@ download_plugins:
   only:
     variables:
       - $PROTECTED == '1'
-      - $CIMPL_STACK == '1'
-
-download_otel_agent:
-  only:
-    variables:
-      - $PROTECTED == '1'
-      - $CIMPL_STACK == '1'
       
 gemnasium-maven-dependency_scanning:
   variables:
