@@ -115,12 +115,22 @@ jobs:
           elif [ "${{ vars.INITIALIZATION_COMPLETE }}" = "true" ]; then
             INITIALIZED=true
             echo "✅ Initialization confirmed via repository variable"
-          # 3. Fallback: check for structural indicators (branches + Java code)
+          # 3. Fallback: check for structural indicators (branches + a supported service shape)
           else
             echo "🔍 Checking structural indicators for initialization..."
+            # A fork-owned descriptor, Maven markers or uv Python markers all mean the
+            # upstream service has been merged (ADR-039). Descriptor *presence* counts:
+            # an invalid descriptor must reach read-service-config, which fails the
+            # required check closed, instead of passing vacuously as "not initialized".
+            SERVICE_SHAPE=false
+            if [ -f ".spi/service.yaml" ] || \
+               [ -f "pom.xml" ] || [ -n "$(find . -name 'pom.xml' -type f 2>/dev/null)" ] || \
+               { [ -f "pyproject.toml" ] && [ -f "uv.lock" ]; }; then
+              SERVICE_SHAPE=true
+            fi
             if git ls-remote --heads origin | grep -q "refs/heads/fork_upstream" && \
                git ls-remote --heads origin | grep -q "refs/heads/fork_integration" && \
-               ([ -f "pom.xml" ] || [ -n "$(find . -name 'pom.xml' -type f 2>/dev/null)" ]); then
+               [ "$SERVICE_SHAPE" = "true" ]; then
               INITIALIZED=true
               echo "✅ Initialization detected via structural indicators"
             fi
@@ -142,6 +152,7 @@ jobs:
     outputs:
       is_initialized: ${{ steps.check_init.outputs.initialized }}
       is_java_repo: ${{ steps.check_java.outputs.is_java }}
+      is_python_repo: ${{ steps.check_python.outputs.is_python }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
         with:
@@ -151,8 +162,12 @@ jobs:
       - name: "Check Repository Initialization"
         id: check_init
         run: |
-          # Check for key files that indicate repo is initialized
-          if [ -f "pom.xml" ] || [ -d "src" ]; then
+          # Key files that indicate the repo is initialized: the fork-owned descriptor
+          # (ADR-039), Maven markers, or uv Python markers. Descriptor presence is enough
+          # — read-service-config fails closed on an invalid one, so a Python repository
+          # can never pass the required check by looking uninitialized.
+          if [ -f ".spi/service.yaml" ] || [ -f "pom.xml" ] || \
+             { [ -f "pyproject.toml" ] && [ -f "uv.lock" ]; } || [ -d "src" ]; then
             echo "initialized=true" >> $GITHUB_OUTPUT
           else
             echo "initialized=false" >> $GITHUB_OUTPUT
@@ -166,6 +181,108 @@ jobs:
           else
             echo "is_java=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: "Check if Python Repository"
+        id: check_python
+        run: |
+          if [ -f "pyproject.toml" ] && [ -f "uv.lock" ]; then
+            echo "is_python=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_python=false" >> $GITHUB_OUTPUT
+          fi
+
+  read-service-config:
+    # ADR-039 prelude: resolve the fork-owned `.spi/service.yaml` into a small, fixed
+    # output contract. The descriptor never yields shell, secrets or deploy targets —
+    # only closed enums, names and paths. Absent descriptor keeps the legacy Java
+    # inference (`fallback=java-inference`), so existing forks are unaffected.
+    name: "🧭 Read Service Config"
+    needs: check-initialization
+    if: needs.check-initialization.outputs.initialized == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      descriptor_present: ${{ steps.config.outputs.descriptor_present }}
+      schema_version: ${{ steps.config.outputs.schema_version }}
+      archetype: ${{ steps.config.outputs.archetype }}
+      service_name: ${{ steps.config.outputs.service_name }}
+      dockerfile_profile: ${{ steps.config.outputs.dockerfile_profile }}
+      unit_test_type: ${{ steps.config.outputs.unit_test_type }}
+      has_coverage: ${{ steps.config.outputs.has_coverage }}
+      # Language-neutral selection output consumed by the build lanes below.
+      build_lane: ${{ steps.config.outputs.build_lane }}
+      lane_implemented: ${{ steps.config.outputs.lane_implemented }}
+      fallback: ${{ steps.config.outputs.fallback }}
+      python_runtime_version: ${{ steps.config.outputs.python_runtime_version }}
+      python_compatibility_versions: ${{ steps.config.outputs.python_compatibility_versions }}
+      python_compatibility_matrix: ${{ steps.config.outputs.python_compatibility_matrix }}
+      python_distribution: ${{ steps.config.outputs.python_distribution }}
+      python_import_package: ${{ steps.config.outputs.python_import_package }}
+      python_test_extras: ${{ steps.config.outputs.python_test_extras }}
+      python_runtime_extras: ${{ steps.config.outputs.python_runtime_extras }}
+      python_unit_test_path: ${{ steps.config.outputs.python_unit_test_path }}
+      python_service_in_process_test_path: ${{ steps.config.outputs.python_service_in_process_test_path }}
+      python_service_subprocess_test_path: ${{ steps.config.outputs.python_service_subprocess_test_path }}
+      app_module: ${{ steps.config.outputs.app_module }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: "Restore trusted service config for sync/pull_request_target"
+        if: github.event_name == 'pull_request_target'
+        run: |
+          set -euo pipefail
+          # §6.4 trust boundary (ADR-039): pull_request_target runs with repository context, so the
+          # descriptor and its parser must come from trusted main, never from the PR head. This
+          # mirrors the existing "restore trusted actions/build" pattern. A main branch without a
+          # descriptor legitimately restores nothing and falls back to Java inference.
+          echo "🔧 Restoring trusted service config from origin/main..."
+          if ! git fetch origin main --depth=1; then
+            echo "❌ Failed to fetch 'main' branch from origin. Cannot resolve a trusted descriptor."
+            exit 1
+          fi
+          rm -rf .spi .github/scripts/service-config
+          git checkout origin/main -- .github/scripts/service-config/ || \
+            echo "ℹ️ Template has no service-config scripts on main yet"
+          git checkout origin/main -- .spi/ || \
+            echo "ℹ️ No trusted descriptor on main — legacy Java inference applies"
+
+      - name: "Resolve Service Configuration"
+        id: config
+        env:
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          READER=".github/scripts/service-config/read_service_config.py"
+          if [ ! -f "$READER" ]; then
+            # Fork predating ADR-039 (template-sync not yet applied): preserve current behaviour.
+            echo "::warning::$READER not found; using legacy Java inference"
+            if [ -f "pom.xml" ] || [ -n "$(find . -name 'pom.xml' -type f)" ]; then
+              LANE=java
+            else
+              LANE=none
+            fi
+            {
+              echo "descriptor_present=false"
+              echo "schema_version="
+              echo "archetype="
+              echo "service_name=${SERVICE_NAME}"
+              echo "dockerfile_profile=$([ "$LANE" = "java" ] && echo java || echo '')"
+              echo "unit_test_type=$([ "$LANE" = "java" ] && echo maven || echo '')"
+              echo "has_coverage=$([ "$LANE" = "java" ] && echo true || echo false)"
+              echo "build_lane=${LANE}"
+              echo "lane_implemented=$([ "$LANE" = "java" ] && echo true || echo false)"
+              echo "fallback=$([ "$LANE" = "java" ] && echo java-inference || echo none)"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 "$READER" \
+            --root . \
+            --service-name "${SERVICE_NAME}" \
+            --format github \
+            --output "$GITHUB_OUTPUT" \
+            --summary "$GITHUB_STEP_SUMMARY"
 
   check-paths:
     name: "🔍 Check for Build-Relevant Changes"
@@ -201,12 +318,15 @@ jobs:
             exit 0
           fi
 
-          # Config-only ignore set (mirrors codeql.yml). .mvn/ is special-cased as build-relevant:
-          # the build copies .mvn/community-maven.settings.xml into Maven settings, so it can affect it.
+          # Config-only ignore set (mirrors codeql.yml). .mvn/ and .spi/ are special-cased as
+          # build-relevant: the build copies .mvn/community-maven.settings.xml into Maven settings,
+          # and .spi/service.yaml selects the build archetype itself (ADR-039). Both start with a
+          # dot and would otherwise be swallowed by the generic dotfile exclusion below.
           SHOULD_RUN=false
           while IFS= read -r file; do
             # .mvn/ affects the Maven build (settings/mirror config); never config-only.
-            case "$file" in .mvn/*) SHOULD_RUN=true; break ;; esac
+            # .spi/ is the service descriptor; a descriptor-only PR must run the full build lane.
+            case "$file" in .mvn/*|.spi/*) SHOULD_RUN=true; break ;; esac
             if echo "$file" | grep -qE '^(\.github/|devops/|docs/|\..*|.*\.md)$'; then
               continue
             fi
@@ -223,12 +343,14 @@ jobs:
 
   java-build:
     name: "🔨 Java Build"
-    needs: [check-initialization, check-repo-state, check-paths]
+    needs: [check-initialization, check-repo-state, check-paths, read-service-config]
     # Skip java-build for Dependabot PRs (handled by dependabot-validation.yml)
     # and for docs/config-only PRs (check-paths.should_run == 'false').
+    # Lane selection is descriptor-driven (ADR-039): `build_lane` is 'java' for the
+    # java-maven-azure archetype and for descriptor-less forks with Maven markers.
     if: |
       needs.check-repo-state.outputs.is_initialized == 'true' &&
-      needs.check-repo-state.outputs.is_java_repo == 'true' &&
+      needs.read-service-config.outputs.build_lane == 'java' &&
       needs.check-paths.outputs.should_run == 'true' &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
@@ -297,12 +419,164 @@ jobs:
           # MAVEN_PROFILE overrides for services that deviate (e.g. indexer-queue).
           maven_profile: ${{ vars.MAVEN_PROFILE || 'core,azure' }}
 
+  python-build:
+    name: "🐍 Python Build"
+    needs: [check-initialization, check-repo-state, check-paths, read-service-config]
+    # Statically declared lane (expressions are not allowed in `uses:`), selected by the
+    # descriptor's language-neutral `build_lane` output (ADR-039). Mirrors the java-build
+    # gating: Dependabot PRs and docs/config-only PRs are handled elsewhere.
+    if: |
+      needs.check-repo-state.outputs.is_initialized == 'true' &&
+      needs.read-service-config.outputs.build_lane == 'python' &&
+      needs.check-paths.outputs.should_run == 'true' &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    outputs:
+      is_python_project: ${{ steps.build.outputs.is_python_project }}
+      build_result: ${{ steps.build.outputs.build_result }}
+      compatibility_matrix: ${{ steps.lane.outputs.compatibility_matrix }}
+      distribution_name: ${{ steps.lane.outputs.distribution_name }}
+      import_package: ${{ steps.lane.outputs.import_package }}
+      test_extras: ${{ steps.lane.outputs.test_extras }}
+      runtime_extras: ${{ steps.lane.outputs.runtime_extras }}
+      unit_test_path: ${{ steps.lane.outputs.unit_test_path }}
+      service_in_process_test_path: ${{ steps.lane.outputs.service_in_process_test_path }}
+      service_subprocess_test_path: ${{ steps.lane.outputs.service_subprocess_test_path }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+        with:
+          # For pull_request_target, we need to check out the PR head to validate the actual changes
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          # The action's lock/export drift gate diffs the working tree against the commit.
+          fetch-depth: 0
+
+      - name: "Restore local actions for sync PRs"
+        if: |
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.base.ref == 'fork_upstream' &&
+          startsWith(github.event.pull_request.head.ref, 'sync/')
+        run: |
+          set -euo pipefail
+          # Sync branches contain only upstream content and don't have local actions.
+          # Restore .github/actions/ from main branch to enable validation.
+          # This also provides security hardening - we always use trusted actions for validation.
+          echo "🔧 Restoring local actions from main branch for sync PR validation..."
+          if ! git fetch origin main --depth=1; then
+            echo "❌ Failed to fetch 'main' branch from origin. Cannot restore local actions."
+            exit 1
+          fi
+          if ! git checkout origin/main -- .github/actions/; then
+            echo "❌ Failed to restore .github/actions/ from origin/main. Cannot proceed with validation."
+            exit 1
+          fi
+          echo "✅ Local actions restored - validation can proceed"
+
+      - name: "Publish Python Lane Contract"
+        id: lane
+        shell: bash
+        run: |
+          {
+            echo "compatibility_matrix=${COMPATIBILITY_MATRIX}"
+            echo "distribution_name=${DISTRIBUTION_NAME}"
+            echo "import_package=${IMPORT_PACKAGE}"
+            echo "test_extras=${TEST_EXTRAS}"
+            echo "runtime_extras=${RUNTIME_EXTRAS}"
+            echo "unit_test_path=${UNIT_TEST_PATH}"
+            echo "service_in_process_test_path=${SERVICE_IN_PROCESS_TEST_PATH}"
+            echo "service_subprocess_test_path=${SERVICE_SUBPROCESS_TEST_PATH}"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          COMPATIBILITY_MATRIX: ${{ needs.read-service-config.outputs.python_compatibility_matrix }}
+          DISTRIBUTION_NAME: ${{ needs.read-service-config.outputs.python_distribution }}
+          IMPORT_PACKAGE: ${{ needs.read-service-config.outputs.python_import_package }}
+          TEST_EXTRAS: ${{ needs.read-service-config.outputs.python_test_extras }}
+          RUNTIME_EXTRAS: ${{ needs.read-service-config.outputs.python_runtime_extras }}
+          UNIT_TEST_PATH: ${{ needs.read-service-config.outputs.python_unit_test_path }}
+          SERVICE_IN_PROCESS_TEST_PATH: ${{ needs.read-service-config.outputs.python_service_in_process_test_path }}
+          SERVICE_SUBPROCESS_TEST_PATH: ${{ needs.read-service-config.outputs.python_service_subprocess_test_path }}
+
+      - name: "Run Python Build"
+        id: build
+        uses: ./.github/actions/python-build
+        with:
+          # Descriptor-provided values (trusted-restored from origin/main on
+          # pull_request_target); safe defaults keep a minimal descriptor working.
+          python_version: ${{ needs.read-service-config.outputs.python_runtime_version || '3.12' }}
+          package_name: ${{ needs.read-service-config.outputs.python_import_package }}
+          distribution_name: ${{ needs.read-service-config.outputs.python_distribution }}
+          test_extras: ${{ needs.read-service-config.outputs.python_test_extras }}
+          runtime_extras: ${{ needs.read-service-config.outputs.python_runtime_extras }}
+          unit_test_path: ${{ needs.read-service-config.outputs.python_unit_test_path }}
+          service_in_process_test_path: ${{ needs.read-service-config.outputs.python_service_in_process_test_path }}
+          service_subprocess_test_path: ${{ needs.read-service-config.outputs.python_service_subprocess_test_path }}
+          generate_coverage: ${{ github.event_name == 'pull_request' && needs.read-service-config.outputs.has_coverage == 'true' }}
+
+  python-compatibility:
+    name: "🐍 Python Compatibility"
+    needs: [python-build]
+    if: needs.python-build.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.python-build.outputs.compatibility_matrix) }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: "Restore local actions for sync PRs"
+        if: |
+          matrix.version != '' &&
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.base.ref == 'fork_upstream' &&
+          startsWith(github.event.pull_request.head.ref, 'sync/')
+        run: |
+          set -euo pipefail
+          if ! git fetch origin main --depth=1; then
+            echo "❌ Failed to fetch 'main' branch from origin. Cannot restore local actions."
+            exit 1
+          fi
+          if ! git checkout origin/main -- .github/actions/; then
+            echo "❌ Failed to restore .github/actions/ from origin/main. Cannot proceed."
+            exit 1
+          fi
+
+      - name: "No compatibility versions requested"
+        if: matrix.version == ''
+        run: echo "No descriptor-declared Python compatibility versions."
+
+      - name: "Run Python Compatibility Build"
+        if: matrix.version != ''
+        uses: ./.github/actions/python-build
+        with:
+          python_version: ${{ matrix.version }}
+          package_name: ${{ needs.python-build.outputs.import_package }}
+          distribution_name: ${{ needs.python-build.outputs.distribution_name }}
+          test_extras: ${{ needs.python-build.outputs.test_extras }}
+          runtime_extras: ${{ needs.python-build.outputs.runtime_extras }}
+          unit_test_path: ${{ needs.python-build.outputs.unit_test_path }}
+          service_in_process_test_path: ${{ needs.python-build.outputs.service_in_process_test_path }}
+          service_subprocess_test_path: ${{ needs.python-build.outputs.service_subprocess_test_path }}
+          generate_coverage: 'false'
+          artifact_suffix: ${{ matrix.artifact_suffix }}
+
   docker-build:
-    # Validate-only worker. NOT the required check — the required "🐳 Docker Build" context is the
-    # summary job below (docker-build-required), which reports once even when this job is skipped.
-    name: "🐳 Docker Build (validate)"
-    needs: [check-initialization, check-repo-state, java-build]
-    if: needs.java-build.outputs.build_result == 'success'
+    # Read-only image validation. It runs without registry credentials on every selected
+    # language lane, including untrusted PR contexts. The credentialed publish job below
+    # repeats the BuildKit solve (normally cache-backed) and validates the release platform
+    # set before pushing. NOT the required check: docker-build-required reports that context.
+    name: "📦 Container Image Validation"
+    needs: [read-service-config, java-build, python-compatibility]
+    if: |
+      !cancelled() &&
+      (
+        (needs.java-build.result == 'success' && needs.java-build.outputs.build_result == 'success') ||
+        (
+          needs.read-service-config.outputs.build_lane == 'python' &&
+          needs.python-compatibility.result == 'success'
+        )
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read          # no packages: write — runs untrusted Dockerfile content
@@ -321,6 +595,7 @@ jobs:
           set -euo pipefail
           # Sync branches carry only upstream content: no local actions and no canonical
           # build/Dockerfile (ADR-037). Restore both from main so docker validation can run.
+          # `build/` carries both canonical profiles (build/Dockerfile, build/python/Dockerfile).
           # This also provides security hardening - we always use trusted actions for validation.
           echo "🔧 Restoring local actions and Dockerfile from main branch for sync PR validation..."
           if ! git fetch origin main --depth=1; then
@@ -333,32 +608,45 @@ jobs:
           fi
           echo "✅ Local actions and Dockerfile restored - validation can proceed"
 
-      - name: "Docker Build (validate-only)"
+      - name: "Validate Container Image"
         uses: ./.github/actions/docker-build
         with:
           push: 'false'                       # validates the Dockerfile compiles; no GHCR login/push
           image_name: ${{ vars.SERVICE_NAME || github.event.repository.name }}
+          # Lane-selected image profile (ADR-039). Java keeps artifact mode and multi-arch
+          # defaults; Python builds the canonical source-mode image, amd64-only for the pilot.
+          build_mode: ${{ needs.read-service-config.outputs.build_lane == 'python' && 'source' || 'java-artifact' }}
+          dockerfile_path: ${{ needs.read-service-config.outputs.build_lane == 'python' && 'build/python/Dockerfile' || 'build/Dockerfile' }}
+          platforms: ${{ needs.read-service-config.outputs.build_lane == 'python' && 'linux/amd64' || '' }}
+          app_module: ${{ needs.read-service-config.outputs.app_module }}
+          runtime_extras: ${{ needs.read-service-config.outputs.python_runtime_extras }}
           # Conventional JAR path; the docker-build action auto-discovers the Azure JAR when a deviant
           # module name (e.g. entitlements-v2-azure) doesn't match, so a fresh fork needs no variable.
           # SERVICE_NAME falls back to the repo name; SERVICE_TARGET_JAR forces a specific path (ADR-037).
           jar_file: ${{ vars.SERVICE_TARGET_JAR || format('provider/{0}-azure/target/*-spring-boot.jar', vars.SERVICE_NAME || github.event.repository.name) }}
 
   docker-push:
-    name: "🐳 Docker Push"
-    needs: [check-initialization, check-repo-state, java-build, docker-build]
+    name: "📤 Build & Publish Container Image"
+    needs: [read-service-config, docker-build]
     # §5.5 trust boundary (ADR-036): push to GHCR only on trusted events. The force_full_pipeline
     # arm is declared by W13 (#19); until then it evaluates null and is harmless.
+    # `!cancelled()` only compensates for the skipped sibling language lane, so the build-success
+    # requirement is represented by the successful read-only container validation. That job
+    # directly verifies the selected Java/Python lane before this credentialed solve begins.
     if: |
+      !cancelled() &&
+      needs.docker-build.result == 'success' &&
       (
-        needs.java-build.outputs.build_result == 'success' &&
-        github.actor != 'dependabot[bot]' &&
-        github.event_name != 'pull_request_target' &&
-        github.event_name != 'workflow_dispatch' &&
-        (github.event_name != 'pull_request' ||
-         github.event.pull_request.head.repo.full_name == github.repository)
-      ) || (
-        github.event_name == 'workflow_dispatch' &&
-        inputs.force_full_pipeline == true
+        (
+          github.actor != 'dependabot[bot]' &&
+          github.event_name != 'pull_request_target' &&
+          github.event_name != 'workflow_dispatch' &&
+          (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository)
+        ) || (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.force_full_pipeline == true
+        )
       )
     runs-on: ubuntu-latest
     permissions:
@@ -393,13 +681,19 @@ jobs:
           fi
           echo "✅ Local actions restored - validation can proceed"
 
-      - name: "Docker Build and Push"
+      - name: "Build and Publish Container Image"
         id: push
         uses: ./.github/actions/docker-build
         with:
           push: 'true'
           image_name: ${{ vars.SERVICE_NAME || github.event.repository.name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Same lane selection as the validate-only job; the Python pilot pushes amd64 only.
+          build_mode: ${{ needs.read-service-config.outputs.build_lane == 'python' && 'source' || 'java-artifact' }}
+          dockerfile_path: ${{ needs.read-service-config.outputs.build_lane == 'python' && 'build/python/Dockerfile' || 'build/Dockerfile' }}
+          platforms: ${{ needs.read-service-config.outputs.build_lane == 'python' && 'linux/amd64' || '' }}
+          app_module: ${{ needs.read-service-config.outputs.app_module }}
+          runtime_extras: ${{ needs.read-service-config.outputs.python_runtime_extras }}
           # Conventional JAR path; the docker-build action auto-discovers the Azure JAR when a deviant
           # module name (e.g. entitlements-v2-azure) doesn't match, so a fresh fork needs no variable.
           # SERVICE_NAME falls back to the repo name; SERVICE_TARGET_JAR forces a specific path (ADR-037).
@@ -407,7 +701,7 @@ jobs:
 
   code-validation:
     name: "✅ Code Quality Checks"
-    needs: [check-initialization, check-repo-state, check-paths, java-build]
+    needs: [check-initialization, check-repo-state, check-paths, read-service-config, java-build, python-build, python-compatibility]
     if: |
       always() &&
       needs.check-initialization.outputs.initialized == 'true'
@@ -527,7 +821,13 @@ jobs:
             ITEMS=$(echo "$ITEMS" | jq '. + ["ℹ️ Dependabot Build Handled by dependabot-validation.yml"]')
           # For all other PRs (including sync PRs), report build status
           elif [[ "${{ needs.check-repo-state.outputs.is_initialized }}" == "true" ]]; then
-            if [[ "${{ needs.check-repo-state.outputs.is_java_repo }}" == "true" ]]; then
+            # Descriptor-driven lane reporting (ADR-039); no descriptor keeps the Java wording.
+            if [[ "${{ needs.read-service-config.outputs.descriptor_present }}" == "true" ]]; then
+              ITEMS=$(echo "$ITEMS" | jq --arg a "${{ needs.read-service-config.outputs.archetype }}" '. + ["✓ Service Descriptor: \($a)"]')
+            fi
+            if [[ "${{ needs.read-service-config.result }}" != "success" ]]; then
+              ITEMS=$(echo "$ITEMS" | jq '. + ["❌ Service Descriptor Invalid or Unreadable"]')
+            elif [[ "${{ needs.read-service-config.outputs.build_lane }}" == "java" ]]; then
               if [[ "${{ needs.java-build.result }}" == "success" ]]; then
                 ITEMS=$(echo "$ITEMS" | jq '. + ["✓ Java Build Successful"]')
               elif [[ "${{ needs.java-build.result }}" == "skipped" && "${{ needs.check-paths.outputs.should_run }}" == "false" ]]; then
@@ -537,8 +837,25 @@ jobs:
               else
                 ITEMS=$(echo "$ITEMS" | jq '. + ["❌ Java Build Failed"]')
               fi
-            else
+            elif [[ "${{ needs.read-service-config.outputs.build_lane }}" == "python" ]]; then
+              if [[ "${{ needs.python-build.result }}" == "success" ]]; then
+                ITEMS=$(echo "$ITEMS" | jq '. + ["✓ Python Build Successful"]')
+              elif [[ "${{ needs.python-build.result }}" == "skipped" && "${{ needs.check-paths.outputs.should_run }}" == "false" ]]; then
+                ITEMS=$(echo "$ITEMS" | jq '. + ["ℹ️ Python Build Skipped (no build-relevant changes)"]')
+              else
+                ITEMS=$(echo "$ITEMS" | jq '. + ["❌ Python Build Failed"]')
+              fi
+              if [[ -n "${{ needs.read-service-config.outputs.python_compatibility_versions }}" ]]; then
+                if [[ "${{ needs.python-compatibility.result }}" == "success" ]]; then
+                  ITEMS=$(echo "$ITEMS" | jq --arg v "${{ needs.read-service-config.outputs.python_compatibility_versions }}" '. + ["✓ Python Compatibility Successful: \($v)"]')
+                else
+                  ITEMS=$(echo "$ITEMS" | jq --arg v "${{ needs.read-service-config.outputs.python_compatibility_versions }}" '. + ["❌ Python Compatibility Failed: \($v)"]')
+                fi
+              fi
+            elif [[ "${{ needs.read-service-config.outputs.build_lane }}" == "none" ]]; then
               ITEMS=$(echo "$ITEMS" | jq '. + ["ℹ️ Non-Java Repository"]')
+            else
+              ITEMS=$(echo "$ITEMS" | jq --arg a "${{ needs.read-service-config.outputs.archetype }}" '. + ["❌ Archetype \($a) Has No Build Lane In This Template Version"]')
             fi
           else
             ITEMS=$(echo "$ITEMS" | jq '. + ["ℹ️ Repository Not Yet Initialized"]')
@@ -557,11 +874,12 @@ jobs:
 
   docker-build-required:
     # Required branch-protection check "🐳 Docker Build" (ADR-030 summary-job pattern, mirrors the
-    # CodeQL summary job). Consolidates the validate-only build into one always-reporting context so
-    # the required check never wedges (config-only/non-Java/dependabot/uninitialized all pass) and a
-    # real build failure blocks. Suppressed on pull_request_target so the dual trigger reports it once.
+    # CodeQL summary job). Reports the selected lane + read-only image validation as
+    # one stable context; trusted publication remains a separate credentialed stage.
+    # (config-only/no-lane/dependabot/uninitialized all pass) and a real build failure blocks.
+    # Suppressed on pull_request_target so the dual trigger reports it once.
     name: "🐳 Docker Build"
-    needs: [check-initialization, check-repo-state, check-paths, java-build, docker-build]
+    needs: [check-initialization, check-repo-state, check-paths, read-service-config, docker-build]
     if: always() && github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
@@ -576,6 +894,10 @@ jobs:
              [ "${{ needs.check-paths.result }}" = "failure" ] || [ "${{ needs.check-paths.result }}" = "cancelled" ]; then
             echo "❌ A validation prerequisite job failed or was cancelled"; exit 1
           fi
+          # An invalid/unreadable service descriptor fails closed (ADR-039): never a green skip.
+          if [ "${{ needs.read-service-config.result }}" = "failure" ] || [ "${{ needs.read-service-config.result }}" = "cancelled" ]; then
+            echo "❌ Service descriptor (.spi/service.yaml) is invalid or could not be read"; exit 1
+          fi
           if [ "${{ needs.check-initialization.outputs.initialized }}" != "true" ]; then
             echo "✅ Docker Build skipped - repository not yet initialized"; exit 0
           fi
@@ -585,16 +907,25 @@ jobs:
           if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
             echo "✅ Docker Build skipped - Dependabot build handled by dependabot-validation.yml"; exit 0
           fi
-          if [ "${{ needs.check-repo-state.outputs.is_java_repo }}" != "true" ]; then
-            echo "✅ Docker Build skipped - non-Java repository"; exit 0
+          # A declared archetype whose build lane is not installed in this template version must
+          # fail closed — a present descriptor may never produce a green skip (ADR-039 §6.3).
+          if [ "${{ needs.read-service-config.outputs.descriptor_present }}" = "true" ] && \
+             [ "${{ needs.read-service-config.outputs.lane_implemented }}" != "true" ]; then
+            echo "❌ Archetype '${{ needs.read-service-config.outputs.archetype }}' has no build lane in this template version"
+            echo "   Update the template (template-sync) before declaring this archetype."
+            exit 1
           fi
-          if [ "${{ needs.java-build.result }}" = "failure" ] || [ "${{ needs.java-build.result }}" = "cancelled" ]; then
-            echo "❌ Java build failed or was cancelled"; exit 1
+          if [ "${{ needs.read-service-config.outputs.build_lane }}" = "none" ]; then
+            echo "✅ Docker Build skipped - no build lane selected (non-Java repository, no descriptor)"; exit 0
           fi
           if [ "${{ needs.docker-build.result }}" = "failure" ] || [ "${{ needs.docker-build.result }}" = "cancelled" ]; then
-            echo "❌ Docker build failed or was cancelled"; exit 1
+            echo "❌ Read-only container validation failed or was cancelled"; exit 1
           fi
-          echo "✅ Docker Build checks completed successfully"
+          if [ "${{ needs.docker-build.result }}" = "success" ]; then
+            echo "✅ Container image validated without registry write"; exit 0
+          fi
+          echo "❌ The selected language lane did not produce a container validation job"
+          exit 1
 
   # ──────────────────────────────────────────────────────────────────────────────
   # Deploy lane (W5b). Appended after docker-push; both jobs consume the trusted
@@ -606,10 +937,16 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────────
   deploy:
     name: "🚀 Deploy to spi-stack"
-    needs: [check-initialization, check-repo-state, java-build, docker-push]
+    needs: [read-service-config, docker-push]
+    # Java-only by design: the Python lane stops at a published GHCR image (issue #42).
+    # `build_lane == 'java'` is explicit rather than implied by java-build's outputs, and
+    # `!cancelled()` neutralizes the skipped Python sibling jobs in the transitive
+    # dependency graph. Every selected-lane dependency is checked explicitly below,
+    # so a failed/skipped Java build or Docker push still fails closed.
     if: |
-      (
-        needs.java-build.outputs.build_result == 'success' &&
+      !cancelled() && (
+        needs.read-service-config.outputs.build_lane == 'java' &&
+        needs.docker-push.result == 'success' &&
         vars.AZURE_CLIENT_ID != '' &&
         github.actor != 'dependabot[bot]' &&
         github.event_name != 'pull_request_target' &&
@@ -617,8 +954,11 @@ jobs:
         (github.event_name != 'pull_request' ||
          github.event.pull_request.head.repo.full_name == github.repository)
       ) || (
+        !cancelled() &&
         github.event_name == 'workflow_dispatch' &&
         inputs.force_full_pipeline == true &&
+        needs.read-service-config.outputs.build_lane == 'java' &&
+        needs.docker-push.result == 'success' &&
         vars.AZURE_CLIENT_ID != ''
       )
     runs-on: ubuntu-latest
@@ -659,10 +999,16 @@ jobs:
 
   integration-test:
     name: "🧪 Integration Tests"
-    needs: [check-initialization, check-repo-state, java-build, docker-push, deploy]
+    needs: [read-service-config, docker-push, deploy]
+    # Java-only by design, same gating as the deploy job (issue #42 keeps the Python
+    # lane at build + image; no Python deploy or acceptance suite is wired). The
+    # explicit result gates keep `!cancelled()` from admitting a failed Java/deploy
+    # dependency while allowing skipped Python siblings.
     if: |
-      (
-        needs.java-build.outputs.build_result == 'success' &&
+      !cancelled() && (
+        needs.read-service-config.outputs.build_lane == 'java' &&
+        needs.docker-push.result == 'success' &&
+        needs.deploy.result == 'success' &&
         vars.AZURE_CLIENT_ID != '' &&
         github.actor != 'dependabot[bot]' &&
         github.event_name != 'pull_request_target' &&
@@ -670,8 +1016,12 @@ jobs:
         (github.event_name != 'pull_request' ||
          github.event.pull_request.head.repo.full_name == github.repository)
       ) || (
+        !cancelled() &&
         github.event_name == 'workflow_dispatch' &&
         inputs.force_full_pipeline == true &&
+        needs.read-service-config.outputs.build_lane == 'java' &&
+        needs.docker-push.result == 'success' &&
+        needs.deploy.result == 'success' &&
         vars.AZURE_CLIENT_ID != ''
       )
     runs-on: ubuntu-latest
