@@ -3,9 +3,9 @@
 #
 # CALLER REQUIREMENTS (composite actions cannot declare permissions or install tools):
 #   - The calling workflow job MUST set `permissions: { id-token: write, contents: read }`.
-#   - The caller MUST have already run azure/login + az aks get-credentials + kubelogin
-#     (the deploy job does this; integration-test reuses the same job's kube context only if
-#     in the same job -- when in a separate job it logs in itself; see inputs azure_*).
+#   - The caller MUST supply Azure credentials as the `azure_*` inputs. This action performs
+#     its own `azure/login` and `az aks get-credentials`, so it works in a job separate from
+#     deploy; no prior login is required.
 #   - kubectl, kubelogin, Java 17, and Maven must be available on the runner.
 #
 # ENCAPSULATION: this action takes only explicit inputs. It never reads vars.* or secrets.*
@@ -199,9 +199,19 @@ runs:
       run: |
         STATE=healthy
         if [ -n "$DEPS" ] && [ "$DEPS" != "{}" ]; then
+          # Validate before iterating: `jq -r keys[]` on malformed input prints
+          # nothing and the loop silently becomes a no-op, so a typo in
+          # ACCEPTANCE_TEST_DEPENDENCIES would read as "no dependencies" instead
+          # of a configuration error.
+          if ! jq -e 'type == "object"' >/dev/null 2>&1 <<< "$DEPS"; then
+            echo "::error::dependencies must be a JSON object of service -> health path (got: $DEPS)"
+            exit 1
+          fi
           for svc in $(jq -r 'keys[]' <<< "$DEPS"); do
             path=$(jq -r --arg s "$svc" '.[$s]' <<< "$DEPS")
-            code=$(curl -s -o /dev/null -w '%{http_code}' "${GW}${path}" || echo "000")
+            # --max-time bounds a hung dependency; without it this advisory probe
+            # can stall the whole lane until the step timeout.
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${GW}${path}" || echo "000")
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
               echo "::warning::Dependency '$svc' unhealthy at ${GW}${path} (HTTP $code)"
               STATE=contaminated
@@ -272,11 +282,24 @@ runs:
     - name: 'Load acceptance-test secrets from Key Vault (masked, multiline-safe)'
       shell: bash
       run: |
+        set -euo pipefail
+        if ! jq -e 'type == "object"' >/dev/null 2>&1 <<< "$MAP"; then
+          echo "::error::secret_map must be a JSON object of env-var-name -> Key Vault secret name (got: $MAP)"
+          exit 1
+        fi
         for env_name in $(jq -r 'keys[]' <<< "$MAP"); do
           secret_name=$(jq -r --arg k "$env_name" '.[$k]' <<< "$MAP")
-          value=$(az keyvault secret show --vault-name "$KV" --name "$secret_name" --query value -o tsv)
-          # Mask BEFORE writing to GITHUB_ENV so it never appears in logs.
-          echo "::add-mask::$value"
+          if ! value=$(az keyvault secret show --vault-name "$KV" --name "$secret_name" --query value -o tsv); then
+            echo "::error::Could not read secret '$secret_name' from Key Vault '$KV' (for $env_name)."
+            exit 1
+          fi
+          # Mask BEFORE writing to GITHUB_ENV so it never appears in logs. Workflow
+          # commands are line-oriented, so a multiline secret must be masked line by
+          # line -- a single ::add-mask:: would register only the first line and emit
+          # the rest as ordinary log output.
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done <<< "$value"
           {
             printf '%s<<__SECRET_EOF__\n' "$env_name"
             printf '%s\n' "$value"
@@ -380,6 +403,15 @@ runs:
     - name: 'Run acceptance tests (retry on flake)'
       id: tests
       uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+      env:
+        # Passed through the environment rather than interpolated into `command`.
+        # GitHub expands ${{ }} into the script text BEFORE bash parses it, so a
+        # value containing shell metacharacters would become executable code.
+        # Reading them as shell variables keeps them data.
+        TEST_DIR: ${{ inputs.test_dir }}
+        MAVEN_PROFILE: ${{ inputs.maven_profile }}
+        MAVEN_GOAL: ${{ inputs.maven_goal }}
+        GATEWAY_URL: ${{ inputs.gateway_url }}
       with:
         timeout_minutes: ${{ inputs.timeout_minutes }}
         max_attempts: ${{ inputs.max_attempts }}
@@ -387,10 +419,17 @@ runs:
         # (e.g. PARTITION_BASE_URL derivations) pick it up; KV-sourced env vars are already
         # in GITHUB_ENV from the previous step.
         command: |
-          cd "${{ inputs.test_dir }}"
-          PROFILE_ARG=""
-          if [ -n "${{ inputs.maven_profile }}" ]; then PROFILE_ARG="-P ${{ inputs.maven_profile }}"; fi
-          GATEWAY_URL="${{ inputs.gateway_url }}" mvn --batch-mode --no-transfer-progress $PROFILE_ARG ${{ inputs.maven_goal }}
+          cd "$TEST_DIR"
+          # maven_goal is a goal list plus flags, so it is intentionally word-split;
+          # `set -f` stops the shell additionally glob-expanding any of those words.
+          set -f
+          if [ -n "$MAVEN_PROFILE" ]; then
+            set -- --batch-mode --no-transfer-progress -P "$MAVEN_PROFILE" $MAVEN_GOAL
+          else
+            set -- --batch-mode --no-transfer-progress $MAVEN_GOAL
+          fi
+          set +f
+          mvn "$@"
 
     - name: 'Summarize JUnit results'
       id: junit
