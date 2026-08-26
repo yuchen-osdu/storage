@@ -1,13 +1,4 @@
 variables:
-  AWS_BUILD_SUBDIR: provider/storage-aws/build-aws
-  AWS_TEST_SUBDIR: testing/storage-test-aws
-  AWS_CHART_SUBDIR: devops/aws/chart
-  AWS_SERVICE: storage
-  AWS_SERVICE_GATEWAY: osdu-gateway
-  AWS_ENVIRONMENT: dev
-  AWS_DEPLOY_TARGET: TF
-  AWS_EKS_DEPLOYMENT_NAME: os-storage
-
   GCP_BUILD_SUBDIR: provider/storage-gcp
   GCP_INT_TEST_SUBDIR: testing/storage-test-gcp
   GCP_APPLICATION_NAME: os-storage
@@ -42,12 +33,6 @@ include:
     file: "publishing/common-pages.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
-    file: "cloud-providers/aws-global.yml"
-
-  - project: "osdu/platform/ci-cd-pipelines"
-    file: "cloud-providers/aws-maven.yml"
-
-  - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/gc-global.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
@@ -66,9 +51,6 @@ include:
     file: "cloud-providers/azure.yml"
 
   - local: "devops/core-plus/pipeline/override-stages.yml"
-
-  - project: "osdu/platform/ci-cd-pipelines"
-    file: "cloud-providers/aws-one-pipeline.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/azure-one-pipeline.yml"
@@ -133,3 +115,4 @@ fossa-check-notice:
 
 schemathesis-tests:
   extends: .schemathesis-tests-template
+

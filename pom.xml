@@ -312,12 +312,6 @@
         </modules>
       </profile>
       <profile>
-        <id>aws</id>
-        <modules>
-          <module>provider/storage-aws</module>
-        </modules>
-      </profile>
-      <profile>
         <id>azure</id>
         <modules>
           <module>provider/storage-azure</module>
