@@ -30,6 +30,8 @@ import org.opengroup.osdu.core.common.model.storage.*;
 import org.opengroup.osdu.core.common.model.storage.validation.ValidKind;
 import org.opengroup.osdu.core.common.model.validation.ValidateCollaborationContext;
 import org.opengroup.osdu.storage.di.SchemaEndpointsConfig;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
 import org.opengroup.osdu.storage.service.BatchService;
 import org.opengroup.osdu.storage.util.EncodeDecode;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,6 +135,29 @@ public class QueryApi {
 															@Parameter(description = "Record ids") @Valid @RequestBody MultiRecordRequest ids) {
 		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
 		return new ResponseEntity<MultiRecordResponse>(this.batchService.fetchMultipleRecords(ids, collaborationContext), HttpStatus.OK);
+	}
+
+	@Operation(summary = "Fetch multiple records' headers by ID", 
+			description = "The API fetches administrative headers (system-managed fields) for multiple records at once, completely omitting the heavy data payload. Allows up to 1000 IDs.",
+			security = {@SecurityRequirement(name = "Authorization")}, tags = { "query" })
+	@ApiResponses(value = {
+			@ApiResponse(responseCode = "200", description = "Fetch multiple records' headers successfully.", content = { @Content(schema = @Schema(implementation = MultiRecordHeadersInfo.class)) }),
+			@ApiResponse(responseCode = "400", description = "Bad Request",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "404", description = "Record(s) not found.",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "500", description = "Internal Server Error",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
+	})
+	@PostMapping(value = "/records/headers", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
+	public ResponseEntity<MultiRecordHeadersInfo> getRecordsHeaders(
+			@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false)
+			@Valid @ValidateCollaborationContext String collaborationDirectives,
+			@Parameter(description = "Record headers query request") @Valid @RequestBody MultiRecordHeadersRequest request) {
+		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		return new ResponseEntity<>(this.batchService.getMultipleRecordsHeaders(request, collaborationContext), HttpStatus.OK);
 	}
 
 	// This endpoint is deprecated as of M6, replaced by schema service. In M7 this endpoint will be deleted

@@ -69,7 +69,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnSingleRecordMatching_when_noConversionRequired() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -95,7 +95,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordMatchingAndRecordNotFound_when_noConversionRequired() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
         String notExistingId = RECORD_ID_PREFIX + "nonexisting:id";
@@ -220,7 +220,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenConversionRequiredAndConversionErrorExists() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsMissingValue(2, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsMissingValue(2, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -248,7 +248,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenConversionRequiredAndNestedPropertyProvidedInMetaBlock() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -271,7 +271,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenConversionRequiredAndNestedPropertyProvidedInMetaBlock1() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -293,8 +293,8 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenDateAndFormatProvidedInMetaBlock() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithDateFormat(1, recordId, KIND, LEGAL_TAG,
-            "creationDate", "2019-08-03", DATETIME_PERSISTABLE_REFERENCE);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithDateFormat(1, recordId, KIND, LEGAL_TAG,
+            "creationDate", "2019-08-03", DATETIME_PERSISTABLE_REFERENCE));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -318,7 +318,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     public void should_returnRecordsAndConversionStatus_whenNestedArrayOfPropertiesProvidedWithoutError() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
 
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit",  UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit",  UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -347,7 +347,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenNestedArrayOfPropertiesProvidedWithInvalidValues() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -374,7 +374,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenInhomogeneousNestedArrayOfPropertiesProvidedWithoutError() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithInhomogeneousNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithInhomogeneousNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -400,7 +400,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenInhomogeneousNestedArrayOfPropertiesProvidedWithInvalidValues() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -427,7 +427,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenInhomogeneousNestedArrayOfPropertiesProvidedWithIndexOutOfBoundary() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndIndexOutOfBoundary(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndIndexOutOfBoundary(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 

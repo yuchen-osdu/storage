@@ -32,6 +32,8 @@ import org.opengroup.osdu.core.common.model.storage.RecordMetadata;
 import org.opengroup.osdu.core.common.model.storage.RecordState;
 import org.opengroup.osdu.storage.conversion.DpsConversionService;
 import org.opengroup.osdu.storage.logging.StorageAuditLogger;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
 import org.opengroup.osdu.storage.opa.model.ValidationOutputRecord;
 import org.opengroup.osdu.storage.opa.service.IOPAService;
 import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
@@ -50,6 +52,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opengroup.osdu.storage.util.RecordConstants.OPA_FEATURE_NAME;
@@ -90,8 +93,8 @@ class BatchServiceImplTest {
     BatchServiceImpl sut = mock(BatchServiceImpl.class, Mockito.CALLS_REAL_METHODS);
     private static final String ACL_OWNER = "test_acl";
     private static final String TEST_KIND = "test_kind";
-    private static final String TEST_ID_1 = "test_id1";
-    private static final String TEST_ID_2 = "test_id2";
+    private static final String TEST_ID_1 = "tenant1:test:test_id1";
+    private static final String TEST_ID_2 = "tenant1:test:test_id2";
     private static final String INT_NUMBER = "IntegerNumber";
     private static final String[] OWNERS = new String[]{ACL_OWNER};
 
@@ -333,6 +336,58 @@ class BatchServiceImplTest {
 
         assertTrue(multiRecordResponse.getRecords().isEmpty());
         assertEquals(2, multiRecordResponse.getNotFound().size());
+    }
+
+    @Test
+    void getMultipleRecordsHeaders_returnsInvalidAndNotFound_whenRecordsNotValidOrNotFound() {
+        List<String> recordIds = Arrays.asList("invalid#id", TEST_ID_1, TEST_ID_2);
+        MultiRecordHeadersRequest request = MultiRecordHeadersRequest.builder()
+                .records(recordIds)
+                .attributes(Arrays.asList("kind", "acl"))
+                .build();
+
+        Map<String, RecordMetadata> recordMetadataMap = new HashMap<>();
+        RecordMetadata metadata = buildRecordMetadata(TEST_ID_2);
+        metadata.setStatus(RecordState.purged);
+        recordMetadataMap.put(TEST_ID_2, metadata);
+
+        when(recordRepository.get(anyList(), any(), any())).thenReturn(recordMetadataMap);
+
+        MultiRecordHeadersInfo result = sut.getMultipleRecordsHeaders(request, Optional.empty());
+
+        assertEquals(1, result.getInvalidRecords().size());
+        assertEquals("invalid#id", result.getInvalidRecords().get(0));
+        assertEquals(2, result.getNotFound().size());
+        assertTrue(result.getNotFound().contains(TEST_ID_1));
+        assertTrue(result.getNotFound().contains(TEST_ID_2));
+        assertTrue(result.getRecords().isEmpty());
+    }
+
+    @Test
+    void getMultipleRecordsHeaders_returnsRecords_whenAuthorizedAndValid() {
+        List<String> recordIds = Arrays.asList(TEST_ID_1);
+        MultiRecordHeadersRequest request = MultiRecordHeadersRequest.builder()
+                .records(recordIds)
+                .build();
+
+        Map<String, RecordMetadata> recordMetadataMap = new HashMap<>();
+        RecordMetadata metadata = buildRecordMetadata(TEST_ID_1);
+        metadata.setUser("test-user");
+        metadata.setCreateTime(1600000000000L);
+        recordMetadataMap.put(TEST_ID_1, metadata);
+
+        when(recordRepository.get(anyList(), any(), any())).thenReturn(recordMetadataMap);
+        when(entitlementsAndCacheService.isDataManager(any())).thenReturn(true);
+
+        MultiRecordHeadersInfo result = sut.getMultipleRecordsHeaders(request, Optional.empty());
+
+        assertTrue(result.getInvalidRecords().isEmpty());
+        assertTrue(result.getNotFound().isEmpty());
+        assertEquals(1, result.getRecords().size());
+        assertEquals(TEST_ID_1, result.getRecords().get(0).getId());
+        assertEquals(TEST_KIND, result.getRecords().get(0).getKind());
+        assertEquals("test-user", result.getRecords().get(0).getCreateUser());
+        assertEquals("2020-09-13T12:26:40.000Z", result.getRecords().get(0).getCreateTime());
     }
 
 
