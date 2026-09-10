@@ -7,26 +7,6 @@ variables:
   CIMPL_TEST_SUBDIR: "testing/storage-test-baremetal"
   DISABLE_INTEGRATION_TEST: true
 
-cimpl-deploy:
-  variables:
-    CIMPL_SERVICE: "storage"
-
-cimpl-acceptance-test:
-  variables:
-    OPA_INTEGRATION_ENABLED: "false"
-    EXPOSE_FEATUREFLAG_ENABLED: "true"
-
-#dev2 jobs
-
-cimpl-dev2-deploy:
-  variables:
-    CIMPL_SERVICE: "storage"
-
-cimpl-dev2-acceptance-test:
-  variables:
-    OPA_INTEGRATION_ENABLED: "false"
-    EXPOSE_FEATUREFLAG_ENABLED: "true"
-    
 #osdu-main jobs
 
 cimpl-dev-deploy:
@@ -43,6 +23,15 @@ cimpl-dev-backup-deploy:
     CIMPL_SERVICE: "storage"
 
 cimpl-dev-backup-acceptance-test:
+  variables:
+    OPA_INTEGRATION_ENABLED: "false"
+    EXPOSE_FEATUREFLAG_ENABLED: "true"
+
+cimpl-prod-deploy:
+  variables:
+    CIMPL_SERVICE: "storage"
+
+cimpl-prod-acceptance-test:
   variables:
     OPA_INTEGRATION_ENABLED: "false"
     EXPOSE_FEATUREFLAG_ENABLED: "true"
