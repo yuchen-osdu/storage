@@ -27,6 +27,7 @@ import org.opengroup.osdu.core.common.model.http.DpsHeaders;
 import org.opengroup.osdu.core.common.model.indexer.OperationType;
 import org.opengroup.osdu.core.common.model.storage.Record;
 import org.opengroup.osdu.core.common.model.storage.*;
+import org.opengroup.osdu.core.common.model.storage.validation.ValidationDoc;
 import org.opengroup.osdu.core.common.storage.PersistenceHelper;
 import org.opengroup.osdu.core.common.util.CollaborationContextUtil;
 import org.opengroup.osdu.storage.conversion.DpsConversionService;
@@ -35,6 +36,9 @@ import org.opengroup.osdu.storage.opa.model.ValidationOutputRecord;
 import org.opengroup.osdu.storage.opa.service.IOPAService;
 import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
 import org.opengroup.osdu.storage.provider.interfaces.IRecordsMetadataRepository;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
+import org.opengroup.osdu.storage.model.RecordHeadersDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.*;
@@ -339,5 +343,140 @@ public abstract class BatchServiceImpl implements BatchService {
         if (failedRecords != null && !failedRecords.isEmpty()) {
             loggerConsumerFail.accept(failedRecords);
         }
+    }
+
+    @Override
+    public MultiRecordHeadersInfo getMultipleRecordsHeaders(MultiRecordHeadersRequest request, Optional<CollaborationContext> collaborationContext) {
+        List<String> invalidRecords = new ArrayList<>();
+        List<String> validIds = validateRecordIds(request.getRecords(), invalidRecords);
+
+        List<String> reqAttrs = request.getAttributes();
+        List<String> notFound = new ArrayList<>();
+        Map<String, String> composedToOriginalIdMap = new HashMap<>();
+        List<RecordMetadata> recordsToAuthorize = fetchRecordsToAuthorize(validIds, collaborationContext, reqAttrs, notFound, composedToOriginalIdMap);
+
+        List<RecordMetadata> authorizedMetadataList = authorizeRecords(recordsToAuthorize);
+
+        identifyUnauthorizedRecords(authorizedMetadataList, recordsToAuthorize, composedToOriginalIdMap, notFound);
+
+        auditLogAuthorizedRecords(authorizedMetadataList);
+
+        List<RecordHeadersDTO> records = projectRecordHeaders(authorizedMetadataList, reqAttrs);
+
+        return MultiRecordHeadersInfo.builder()
+                .records(records)
+                .notFound(notFound)
+                .invalidRecords(invalidRecords)
+                .build();
+    }
+
+    private List<String> validateRecordIds(List<String> recordIds, List<String> invalidRecords) {
+        List<String> validIds = new ArrayList<>();
+        if (recordIds != null) {
+            for (String recordId : recordIds) {
+                if (recordId == null || !recordId.matches(ValidationDoc.RECORD_ID_REGEX)) {
+                    invalidRecords.add(recordId);
+                } else {
+                    validIds.add(recordId);
+                }
+            }
+        }
+        return validIds;
+    }
+
+    private List<RecordMetadata> fetchRecordsToAuthorize(
+            List<String> validIds,
+            Optional<CollaborationContext> collaborationContext,
+            List<String> reqAttrs,
+            List<String> notFound,
+            Map<String, String> composedToOriginalIdMap) {
+        List<RecordMetadata> recordsToAuthorize = new ArrayList<>();
+
+        Map<String, RecordMetadata> recordsMetadata = this.recordRepository.get(validIds, collaborationContext, reqAttrs);
+
+        for (String recordId : validIds) {
+            String composedId = CollaborationContextUtil.composeIdWithNamespace(recordId, collaborationContext);
+            RecordMetadata metadata = recordsMetadata.get(composedId);
+
+            if (metadata == null || !RecordState.active.equals(metadata.getStatus()) || metadata.getLatestVersion() == null) {
+                notFound.add(recordId);
+            } else {
+                recordsToAuthorize.add(metadata);
+                composedToOriginalIdMap.put(composedId, recordId);
+            }
+        }
+        return recordsToAuthorize;
+    }
+
+    private List<RecordMetadata> authorizeRecords(List<RecordMetadata> recordsToAuthorize) {
+        List<RecordMetadata> authorizedMetadataList = new ArrayList<>();
+        if (recordsToAuthorize.isEmpty()) {
+            return authorizedMetadataList;
+        }
+
+        if (this.entitlementsAndCacheService.isDataManager(this.headers)) {
+            authorizedMetadataList.addAll(recordsToAuthorize);
+        } else {
+            if (featureFlag.isFeatureEnabled(OPA_FEATURE_NAME)) {
+                authorizedMetadataList.addAll(authorizeWithOpa(recordsToAuthorize));
+            } else {
+                List<RecordMetadata> passAclCheckRecordsMetadata = this.entitlementsAndCacheService.hasValidAccess(recordsToAuthorize, this.headers);
+                authorizedMetadataList.addAll(passAclCheckRecordsMetadata);
+            }
+        }
+        return authorizedMetadataList;
+    }
+
+    private List<RecordMetadata> authorizeWithOpa(List<RecordMetadata> recordsToAuthorize) {
+        List<RecordMetadata> authorized = new ArrayList<>();
+        List<ValidationOutputRecord> dataAuthResult = this.opaService.validateUserAccessToRecords(recordsToAuthorize, OperationType.view);
+        for (ValidationOutputRecord outputRecord : dataAuthResult) {
+            if (outputRecord.getErrors().isEmpty()) {
+                String authComposedId = outputRecord.getId();
+                recordsToAuthorize.stream()
+                        .filter(m -> authComposedId.equals(m.getId()))
+                        .findFirst()
+                        .ifPresent(authorized::add);
+            }
+        }
+        return authorized;
+    }
+
+    private void identifyUnauthorizedRecords(
+            List<RecordMetadata> authorizedMetadataList,
+            List<RecordMetadata> recordsToAuthorize,
+            Map<String, String> composedToOriginalIdMap,
+            List<String> notFound) {
+        Set<String> authorizedComposedIds = authorizedMetadataList.stream()
+                .map(RecordMetadata::getId)
+                .collect(Collectors.toSet());
+
+        for (RecordMetadata metadata : recordsToAuthorize) {
+            String composedId = metadata.getId();
+            if (!authorizedComposedIds.contains(composedId)) {
+                String originalId = composedToOriginalIdMap.get(composedId);
+                if (originalId != null && !notFound.contains(originalId)) {
+                    notFound.add(originalId);
+                }
+            }
+        }
+    }
+
+    private void auditLogAuthorizedRecords(List<RecordMetadata> authorizedMetadataList) {
+        List<String> authorizedVersionPaths = new ArrayList<>();
+        for (RecordMetadata metadata : authorizedMetadataList) {
+            authorizedVersionPaths.add(metadata.getVersionPath(metadata.getLatestVersion()));
+        }
+        if (!authorizedVersionPaths.isEmpty()) {
+            this.auditLogger.readMultipleRecordsSuccess(authorizedVersionPaths);
+        }
+    }
+
+    private List<RecordHeadersDTO> projectRecordHeaders(List<RecordMetadata> authorizedMetadataList, List<String> reqAttrs) {
+        List<RecordHeadersDTO> records = new ArrayList<>();
+        for (RecordMetadata metadata : authorizedMetadataList) {
+            records.add(RecordHeadersDTO.builderWithMetadata(metadata, reqAttrs).build());
+        }
+        return records;
     }
 }

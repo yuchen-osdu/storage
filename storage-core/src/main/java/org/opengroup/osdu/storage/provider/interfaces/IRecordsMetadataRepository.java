@@ -46,6 +46,10 @@ public interface IRecordsMetadataRepository<K extends Serializable> {
 
     Map<String, RecordMetadata> get(List<String> ids, Optional<CollaborationContext> collaborationContext);
 
+    default Map<String, RecordMetadata> get(List<String> ids, Optional<CollaborationContext> collaborationContext, List<String> attributes) {
+        return get(ids, collaborationContext);
+    }
+
     //TODO remove after all providers replace it with the new method queryByLegal
     AbstractMap.SimpleEntry<K, List<RecordMetadata>> queryByLegalTagName(String legalTagName, int limit, K cursor);
 

@@ -14,31 +14,44 @@
 
 package org.opengroup.osdu.storage.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+
 import com.google.common.collect.Lists;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.opengroup.osdu.core.common.http.CollaborationContextFactory;
 import org.opengroup.osdu.core.common.model.http.CollaborationContext;
+import org.opengroup.osdu.core.common.model.storage.DatastoreQueryResult;
+import org.opengroup.osdu.core.common.model.storage.MultiRecordIds;
+import org.opengroup.osdu.core.common.model.storage.MultiRecordInfo;
 import org.opengroup.osdu.core.common.model.storage.Record;
-import org.opengroup.osdu.core.common.model.storage.*;
+import org.opengroup.osdu.core.common.model.storage.StorageRole;
 import org.opengroup.osdu.storage.di.SchemaEndpointsConfig;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
 import org.opengroup.osdu.storage.service.BatchService;
 import org.opengroup.osdu.storage.util.EncodeDecode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-
-import java.lang.reflect.Method;
-import java.util.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class QueryApiTest {
@@ -254,6 +267,56 @@ public class QueryApiTest {
 
         assertFalse(annotation.value().contains(StorageRole.VIEWER));
         assertFalse(annotation.value().contains(StorageRole.CREATOR));
+        assertTrue(annotation.value().contains(StorageRole.ADMIN));
+    }
+
+    @Test
+    public void should_returnHttp200_when_gettingRecordsHeadersSuccessfullyWithCollaborationContext() {
+        MultiRecordHeadersRequest request = MultiRecordHeadersRequest.builder()
+                .records(Lists.newArrayList("id1", "id2"))
+                .build();
+
+        MultiRecordHeadersInfo output = MultiRecordHeadersInfo.builder()
+                .records(Collections.emptyList())
+                .build();
+
+        when(this.batchService.getMultipleRecordsHeaders(request, COLLABORATION_CONTEXT)).thenReturn(output);
+        when(this.collaborationContextFactory.create(COLLABORATION_DIRECTIVES)).thenReturn(COLLABORATION_CONTEXT);
+
+        ResponseEntity<MultiRecordHeadersInfo> response = this.sut.getRecordsHeaders(COLLABORATION_DIRECTIVES, request);
+
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
+        assertNotNull(response.getBody());
+        assertEquals(output, response.getBody());
+    }
+
+    @Test
+    public void should_returnHttp200_when_gettingRecordsHeadersSuccessfullyWithoutCollaborationContext() {
+        MultiRecordHeadersRequest request = MultiRecordHeadersRequest.builder()
+                .records(Lists.newArrayList("id1", "id2"))
+                .build();
+
+        MultiRecordHeadersInfo output = MultiRecordHeadersInfo.builder()
+                .records(Collections.emptyList())
+                .build();
+
+        when(this.batchService.getMultipleRecordsHeaders(request, Optional.empty())).thenReturn(output);
+        when(this.collaborationContextFactory.create(COLLABORATION_DIRECTIVES)).thenReturn(Optional.empty());
+
+        ResponseEntity<MultiRecordHeadersInfo> response = this.sut.getRecordsHeaders(COLLABORATION_DIRECTIVES, request);
+
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
+        assertNotNull(response.getBody());
+        assertEquals(output, response.getBody());
+    }
+
+    @Test
+    public void should_allowAccessToGetRecordsHeaders_when_userBelongsToViewerCreatorOrAdminGroups() throws Exception {
+        Method method = this.sut.getClass().getMethod("getRecordsHeaders", String.class, MultiRecordHeadersRequest.class);
+        PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
+
+        assertTrue(annotation.value().contains(StorageRole.VIEWER));
+        assertTrue(annotation.value().contains(StorageRole.CREATOR));
         assertTrue(annotation.value().contains(StorageRole.ADMIN));
     }
 }

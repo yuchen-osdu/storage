@@ -17,19 +17,20 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <artifactId>storage-azure</artifactId>
+  <version>0.31.0-SNAPSHOT</version>
   <description>Storage service on Azure</description>
   <packaging>jar</packaging>
 
   <parent>
     <artifactId>os-storage</artifactId>
     <groupId>org.opengroup.osdu</groupId>
-    <version>0.30.0-SNAPSHOT</version>
+    <version>0.31.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <properties>
     <!-- Azure Dependencies -->
-    <core-lib-azure.version>2.5.5</core-lib-azure.version>
+    <core-lib-azure.version>3.0.3</core-lib-azure.version>
     <azure-storage-blob.version>12.29.0</azure-storage-blob.version>
     <nimbus-jose-jwt.version>9.47</nimbus-jose-jwt.version>
     <!-- Plugin Versions -->
@@ -47,7 +48,14 @@
 
   <dependencyManagement>
       <dependencies>
-        <!-- Core Azure Library -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+<!-- Core Azure Library -->
         <dependency>
           <groupId>org.opengroup.osdu</groupId>
           <artifactId>core-lib-azure</artifactId>

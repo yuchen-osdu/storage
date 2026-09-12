@@ -31,6 +31,11 @@ public class TestUtils {
         return String.format("%s.%s",tenantId, groupId);
     }
 
+    /**
+     * @deprecated Use dynamically created groups from test classes instead of hardcoded values.
+     * This method returns a hardcoded group email and should not be used in new tests.
+     */
+    @Deprecated
     public static  String getAcl() {
         return String.format("data.test1@%s", getAclSuffix());
     }
