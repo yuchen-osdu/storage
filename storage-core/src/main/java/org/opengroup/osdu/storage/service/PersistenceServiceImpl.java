@@ -44,8 +44,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
-
 @Service
 public class PersistenceServiceImpl implements PersistenceService {
 
@@ -63,8 +61,6 @@ public class PersistenceServiceImpl implements PersistenceService {
 
     @Autowired
     private JaxRsDpsLog logger;
-    @Autowired
-    private IFeatureFlag collaborationFeatureFlag;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -98,9 +94,9 @@ public class PersistenceServiceImpl implements PersistenceService {
         }
 
         this.commitBatch(recordsProcessing, recordsMetadata, collaborationContext);
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2);
-        } else if (!collaborationContext.isPresent()) {
+        } else  {
             this.pubSubClient.publishMessage(this.headers, pubsubInfo);
         }
     }
@@ -157,9 +153,9 @@ public class PersistenceServiceImpl implements PersistenceService {
             pubsubInfo[i] = getPubSubInfo(metadata, OperationType.update);
             recordChangedV2[i] = getRecordChangedV2(metadata, OperationType.update);
         }
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2);
-        } else if (!collaborationContext.isPresent()) {
+        } else {
             this.pubSubClient.publishMessage(this.headers, pubsubInfo);
         }
 
@@ -212,9 +208,9 @@ public class PersistenceServiceImpl implements PersistenceService {
                 pubSubInfos.add(pubSubInfo);
                 recordChangedV2s.add(recordChangedV2);
             }
-            if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+            if (collaborationContext.isPresent()) {
                 this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2s.stream().toArray(RecordChangedV2[]::new));
-            } else if (!collaborationContext.isPresent()) {
+            } else {
                 this.pubSubClient.publishMessage(this.headers, pubSubInfos.stream().toArray(PubSubInfo[]::new));
             }
         }
@@ -234,9 +230,9 @@ public class PersistenceServiceImpl implements PersistenceService {
             pubsubInfo[i] = getPubSubInfo(metadata, OperationType.update);
             recordChangedV2[i] = getRecordChangedV2(metadata, OperationType.update);
         }
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2);
-        } else if (collaborationContext.isEmpty()) {
+        } else {
             this.pubSubClient.publishMessage(this.headers, pubsubInfo);
         }
 
