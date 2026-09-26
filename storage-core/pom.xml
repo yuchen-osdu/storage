@@ -18,13 +18,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>storage-core</artifactId>
+    <version>0.31.0-SNAPSHOT</version>
     <description>Core project for the storage service</description>
     <packaging>jar</packaging>
 
     <parent>
         <groupId>org.opengroup.osdu</groupId>
         <artifactId>os-storage</artifactId>
-        <version>0.30.0-SNAPSHOT</version>
+        <version>0.31.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -67,7 +68,7 @@
             os-core-common 7.0.0 declares lettuce-core as provided scope, which Maven does
             NOT propagate transitively, so consumers of os-core-common must declare lettuce-core
             themselves. Library-level scope=provided so deployable consumers (storage-core-plus,
-            storage-aws, etc.) control the runtime version.
+            storage-azure, etc.) control the runtime version.
         -->
         <dependency>
             <groupId>io.lettuce</groupId>

@@ -23,23 +23,38 @@ import com.google.common.base.Strings;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.apache.hc.core5.http.HttpStatus;
 import org.opengroup.osdu.core.test.auth.UserType;
 import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.storage.BaseStorageAcceptanceTest;
 import org.opengroup.osdu.storage.util.RecordUtil;
 import org.opengroup.osdu.storage.util.TestUtils;
+import org.junit.jupiter.api.BeforeAll;
 
 /**
  * Base class for storage records acceptance tests.
  */
 public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTest {
 
+  // Dynamically created integration test group
+  protected String integrationTestGroupEmail;
+
   protected BaseRecordsAcceptanceTest() {
   }
 
   protected BaseRecordsAcceptanceTest(List<UserType> userTypes) {
     super(userTypes);
+  }
+
+  @BeforeAll
+  void createIntegrationTestGroupOnce() throws InterruptedException {
+    String randomGroupName = "data.inttest-" + UUID.randomUUID();
+    var createGroupResponse = entitlementsClient.createGroup(
+        randomGroupName, "Integration test group for storage acceptance tests");
+    assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
+    integrationTestGroupEmail = createGroupResponse.body().email();
+    Thread.sleep(3000);
   }
 
   protected static final String COLLABORATION_HEADER = "x-collaboration";
@@ -49,7 +64,7 @@ public abstract class BaseRecordsAcceptanceTest extends BaseStorageAcceptanceTes
   }
 
   protected String getIntegrationTesterAcl() {
-    return String.format("data.integration.test@%s", getAclSuffix());
+    return integrationTestGroupEmail;
   }
 
   protected StorageRecord[] withTestAcl(StorageRecord[] records) {
