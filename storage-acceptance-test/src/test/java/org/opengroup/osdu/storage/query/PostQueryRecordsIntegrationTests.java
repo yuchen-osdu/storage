@@ -50,7 +50,7 @@ public final class PostQueryRecordsIntegrationTests extends BaseRecordsAcceptanc
     String LEGAL_TAG = getTenantId() + "-storage-" + NOW;
 
     createLegalTag(LEGAL_TAG);
-    StorageRecord[] jsonInput = RecordUtil.createDefaultRecords(3, RECORD_ID, KIND, LEGAL_TAG);
+    StorageRecord[] jsonInput = withTestAcl(RecordUtil.createDefaultRecords(3, RECORD_ID, KIND, LEGAL_TAG));
 
     HttpResponse<CreateRecordsResponse> response = storageClient.putRecords(jsonInput);
     HttpResponse<CreateRecordsResponse> modifyRecordsResponse = storageClient.putRecords(jsonInput);

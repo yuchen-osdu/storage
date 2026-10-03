@@ -18,6 +18,7 @@
 package org.opengroup.osdu.storage.records;
 
 import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.entitlements.CreateGroupRequest;
 import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 
 import org.opengroup.osdu.core.test.client.model.storage.StorageRecord;
@@ -92,10 +93,11 @@ public final class DataRootAccessTest extends BaseRecordsAcceptanceTest {
   }
 
   private String createDataGroup() {
-    var entitlementsGroup = entitlementsClient.createGroup(
+    CreateGroupRequest createGroupRequest = new CreateGroupRequest(
         DATA_GROUP_ID,
-        "Used in ACL, to test that users.data.root have access to any data group.",
-        UserType.PRIVILEGED_USER);
+        "Used in ACL, to test that users.data.root have access to any data group."
+    );
+    var entitlementsGroup = entitlementsClient.createGroup(createGroupRequest);
     assertEquals(HttpStatus.SC_CREATED, entitlementsGroup.statusCode());
     return entitlementsGroup.body().email();
   }

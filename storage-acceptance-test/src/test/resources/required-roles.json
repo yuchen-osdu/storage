@@ -7,9 +7,7 @@
     "service.storage.creator",
     "service.storage.viewer",
     "service.legal.admin",
-    "service.legal.editor",
-    "data.test1",
-    "data.integration.test"
+    "service.legal.editor"
   ],
   "NO_ACCESS_USER": [
     "users",
