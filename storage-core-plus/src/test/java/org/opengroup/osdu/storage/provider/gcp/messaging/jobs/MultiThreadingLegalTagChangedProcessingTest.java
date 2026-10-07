@@ -45,6 +45,7 @@ import org.opengroup.osdu.core.common.model.legal.LegalCompliance;
 import org.opengroup.osdu.core.common.model.legal.jobs.LegalTagConsistencyValidator;
 import org.opengroup.osdu.core.common.model.storage.PubSubInfo;
 import org.opengroup.osdu.core.common.model.storage.RecordMetadata;
+import org.opengroup.osdu.core.common.model.storage.RecordState;
 import org.opengroup.osdu.core.common.model.storage.Schema;
 import org.opengroup.osdu.core.common.model.tenant.TenantInfo;
 import org.opengroup.osdu.core.common.provider.interfaces.ITenantFactory;
@@ -225,6 +226,7 @@ class MultiThreadingLegalTagChangedProcessingTest {
 
         RecordMetadata recordMetadata = new RecordMetadata();
         recordMetadata.setId("record-id" + legalTagName);
+        recordMetadata.setStatus(RecordState.active);
         recordMetadata.setLegal(legal);
 
         SimpleEntry<String, List<RecordMetadata>> mapWithValues = new SimpleEntry<>("empty", Collections.singletonList(recordMetadata));

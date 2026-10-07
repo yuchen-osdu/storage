@@ -1344,6 +1344,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AppError"
+        "409":
+          description: Record is legally withheld and cannot be undeleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppError"
         "500":
           description: Internal Server Error
           content:
