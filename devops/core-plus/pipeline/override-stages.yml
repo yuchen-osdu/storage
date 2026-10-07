@@ -17,6 +17,11 @@ cimpl-dev-acceptance-test:
   variables:
     OPA_INTEGRATION_ENABLED: "false"
     EXPOSE_FEATUREFLAG_ENABLED: "true"
+  # The shared .m2 cache exceeds the maximum S3 upload size, so it can never be
+  # created and every run ends in a FATAL cache error. This job only needs ~67MB
+  # of dependencies, so resolving them directly is simpler and avoids restoring
+  # the oversized shared archive.
+  cache: []
 
 cimpl-dev-backup-deploy:
   variables:
