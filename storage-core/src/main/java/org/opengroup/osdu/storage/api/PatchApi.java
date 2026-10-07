@@ -33,6 +33,7 @@ import org.opengroup.osdu.storage.model.PatchRecordsRequestModel;
 import org.opengroup.osdu.storage.response.BulkUpdateRecordsResponse;
 import org.opengroup.osdu.storage.service.BulkUpdateRecordService;
 import org.opengroup.osdu.storage.service.PatchRecordsService;
+import org.opengroup.osdu.storage.util.CollaborationContextHelper;
 import org.opengroup.osdu.storage.util.CollaborationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,8 @@ import org.opengroup.osdu.storage.response.PatchRecordsResponse;
 
 import jakarta.validation.Valid;
 import java.util.Optional;
+
+import static org.opengroup.osdu.core.common.model.collaboration.validation.CollaborationContextValidationDoc.X_COLLABORATION_DIRECTIVES_PATTERN;
 
 @RestController
 @RequestMapping("records")
@@ -76,15 +79,16 @@ public class PatchApi {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "403", description = "User not authorized to perform the action.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "404", description = "Not Found", content = {@Content(schema = @Schema(implementation = AppError.class))}),
+            @ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "500", description = "Internal Server Error", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "502", description = "Bad Gateway", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "503", description = "Service Unavailable", content = {@Content(schema = @Schema(implementation = AppError.class))})
     })
     @PatchMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-    public ResponseEntity<BulkUpdateRecordsResponse> updateRecordsMetadata(@Parameter(description = "x-collaboration") @RequestHeader(name = CollaborationFilter.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+    public ResponseEntity<BulkUpdateRecordsResponse> updateRecordsMetadata(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = CollaborationFilter.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
                                                                            @Parameter(description = "Records to be updated") @RequestBody @Valid RecordBulkUpdateParam recordBulkUpdateParam) {
-        Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+        Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
         BulkUpdateRecordsResponse response = this.bulkUpdateRecordService.bulkUpdateRecords(recordBulkUpdateParam, this.headers.getUserEmail(), collaborationContext);
         if (!response.getLockedRecordIds().isEmpty() || !response.getNotFoundRecordIds().isEmpty() || !response.getUnAuthorizedRecordIds().isEmpty()) {
             return new ResponseEntity<>(response, HttpStatus.PARTIAL_CONTENT);
@@ -102,15 +106,16 @@ public class PatchApi {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "403", description = "User not authorized to perform the action.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "404", description = "Not Found", content = {@Content(schema = @Schema(implementation = AppError.class))}),
+            @ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "500", description = "Internal Server Error", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "502", description = "Bad Gateway", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "503", description = "Service Unavailable", content = {@Content(schema = @Schema(implementation = AppError.class))})
     })
     @PatchMapping(consumes = "application/json-patch+json", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-    public ResponseEntity<PatchRecordsResponse> patchRecords(@Parameter(description = "x-collaboration") @RequestHeader(name = CollaborationFilter.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+    public ResponseEntity<PatchRecordsResponse> patchRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = CollaborationFilter.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
                                                              @Parameter(description = "Records to be patched") @RequestBody @Valid PatchRecordsRequestModel patchRecordsRequest) {
-        Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+        Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
         PatchRecordsResponse response = this.patchRecordsService.patchRecords(patchRecordsRequest.getQuery().getIds(), patchRecordsRequest.getOps(), this.headers.getUserEmail(), collaborationContext);
         if (!response.getNotFoundRecordIds().isEmpty() || !response.getFailedRecordIds().isEmpty()) {
             return new ResponseEntity<>(response, HttpStatus.PARTIAL_CONTENT);

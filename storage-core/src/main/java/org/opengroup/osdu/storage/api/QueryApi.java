@@ -33,6 +33,7 @@ import org.opengroup.osdu.storage.di.SchemaEndpointsConfig;
 import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
 import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
 import org.opengroup.osdu.storage.service.BatchService;
+import org.opengroup.osdu.storage.util.CollaborationContextHelper;
 import org.opengroup.osdu.storage.util.EncodeDecode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,8 @@ import org.springframework.web.context.annotation.RequestScope;
 
 import jakarta.validation.Valid;
 import java.util.Optional;
+
+import static org.opengroup.osdu.core.common.model.collaboration.validation.CollaborationContextValidationDoc.X_COLLABORATION_DIRECTIVES_PATTERN;
 
 @RestController
 @RequestMapping("query")
@@ -68,7 +71,7 @@ public class QueryApi {
 			security = {@SecurityRequirement(name = "Authorization")}, tags = { "query" })
 	@ApiResponses(value = {
 			@ApiResponse(responseCode = "200", description = "Record Ids retrieved successfully.", content = { @Content(schema = @Schema(implementation = DatastoreQueryResult.class)) }),
-			@ApiResponse(responseCode = "400", description = "Bad Request",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "400", description = "Bad Request", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Kind or cursor not found.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
@@ -76,14 +79,14 @@ public class QueryApi {
 			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
 	})
-	@GetMapping(value = "/records", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+	@GetMapping(value = "/records", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.ADMIN + "')")
 	public ResponseEntity<DatastoreQueryResult> getAllRecords(
-			@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+			@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
 			@Parameter(description = "Cursor") @RequestParam(required = false) String cursor,
 			@Parameter(description = "Page Size", example = "10") @RequestParam(required = false) Integer limit,
-			@Parameter(description = "Filter Kind", example = "tenant1:public:well:1.0.2") @RequestParam @ValidKind String kind) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+			@Parameter(description = "Filter Kind", example = "osdu:public:well:1.0.2") @RequestParam @ValidKind String kind) {
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		DatastoreQueryResult result = this.batchService.getAllRecords(encodeDecode.deserializeCursor(cursor), kind, limit, collaborationContext);
 		result.setCursor(encodeDecode.serializeCursor(result.getCursor()));
 		return new ResponseEntity<DatastoreQueryResult>(result, HttpStatus.OK);
@@ -98,16 +101,17 @@ public class QueryApi {
 			@ApiResponse(responseCode = "400", description = "Bad Request",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Not Found",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
 	})
 	@PostMapping(value = "/records", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<MultiRecordInfo> getRecords(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false)
+	public ResponseEntity<MultiRecordInfo> getRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false)
 													  @Valid @ValidateCollaborationContext String collaborationDirectives,
 													  @Parameter(description = "Record ids") @Valid @RequestBody MultiRecordIds ids) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		return new ResponseEntity<MultiRecordInfo>(this.batchService.getMultipleRecords(ids, collaborationContext), HttpStatus.OK);
 	}
 
@@ -124,16 +128,17 @@ public class QueryApi {
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Not Found",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
 	})
 	@PostMapping(value = "/records:batch", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<MultiRecordResponse> fetchRecords(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false)
+	public ResponseEntity<MultiRecordResponse> fetchRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false)
 															@Valid @ValidateCollaborationContext String collaborationDirectives,
 															@Parameter(description = "Record ids") @Valid @RequestBody MultiRecordRequest ids) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		return new ResponseEntity<MultiRecordResponse>(this.batchService.fetchMultipleRecords(ids, collaborationContext), HttpStatus.OK);
 	}
 
@@ -146,6 +151,7 @@ public class QueryApi {
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Record(s) not found.",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
@@ -153,10 +159,10 @@ public class QueryApi {
 	@PostMapping(value = "/records/headers", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
 	public ResponseEntity<MultiRecordHeadersInfo> getRecordsHeaders(
-			@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false)
+			@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false)
 			@Valid @ValidateCollaborationContext String collaborationDirectives,
 			@Parameter(description = "Record headers query request") @Valid @RequestBody MultiRecordHeadersRequest request) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		return new ResponseEntity<>(this.batchService.getMultipleRecordsHeaders(request, collaborationContext), HttpStatus.OK);
 	}
 

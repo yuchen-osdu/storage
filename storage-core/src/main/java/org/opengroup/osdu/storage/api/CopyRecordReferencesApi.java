@@ -42,6 +42,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import static org.opengroup.osdu.core.common.model.collaboration.validation.CollaborationContextValidationDoc.X_COLLABORATION_DIRECTIVES_WITH_APPLICATION_PATTERN;
+
 @RestController
 @RequestMapping("records")
 @Tag(name = "records", description = "Copying record references management operations")
@@ -66,6 +68,7 @@ public class CopyRecordReferencesApi {
           @Content(schema = @Schema(implementation = AppError.class))}),
       @ApiResponse(responseCode = "409", description = "One or more references already exist in the target namespace.", content = {
           @Content(schema = @Schema(implementation = AppError.class))}),
+      @ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
       @ApiResponse(responseCode = "500", description = "Internal Server Error", content = {
           @Content(schema = @Schema(implementation = AppError.class))}),
       @ApiResponse(responseCode = "502", description = "Bad Gateway", content = {
@@ -78,8 +81,12 @@ public class CopyRecordReferencesApi {
       "@authorizationFilter.hasRole('" + StorageRole.ADMIN + "')")
   @ResponseStatus(HttpStatus.OK)
   public ResponseEntity<CopyRecordReferencesModel> copyRecordReferencesBetweenNamespaces(
-      @Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration")
-      @Valid String collaborationDirectives,
+      @Parameter(description = "x-collaboration source namespace. Must include 'application'. "
+          + "Omit 'id' for System-of-Record (e.g. \"application=<caller>\"); "
+          + "include \"id=<uuid>,application=<caller>\" when copying from a collaboration WIP.",
+          required = true, schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_WITH_APPLICATION_PATTERN))
+      @RequestHeader(name = "x-collaboration", required = true)
+      String collaborationDirectives,
       @Parameter(description = "Record references with target namespace") @RequestBody @Valid CopyRecordReferencesModel request) {
 
     return new ResponseEntity<>(

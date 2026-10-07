@@ -47,3 +47,11 @@ build/
 
 # GitHub Copilot
 .github/copilot-instructions.md
+
+# Schemathesis
+schemathesis-tests/output/
+schemathesis-tests/.token
+schemathesis-tests/.schemathesis/
+schemathesis-tests/.hypothesis/
+__pycache__/
+

@@ -4,8 +4,11 @@ variables:
   AZURE_TEST_SUBDIR: testing/storage-test-azure
   SERVICE_JAVA_VERSION: "17"
 
+  # Discover OpenAPI specs via springdoc swagger-config.
+  # Do not set CIMPL_OPENAPI_YAML_ROUTE or CIMPL_OPENAPI_SPEC_PATH — those bypass
+  # discovery and pin openapi-spec checks to a single route (ci-cd-pipelines#65).
+  # Schemathesis routes are set via .schemathesis-storage-matrix below.
   CIMPL_OPENAPI_CONFIG_ROUTE: /api/storage/v2/api-docs/swagger-config
-  SCHEMATHESIS_OPENAPI_YAML_ROUTE: /api/storage/v2/api-docs.yaml
 
   CORE_BUILD_SUBDIR: storage-core
   ACCEPTANCE_TEST_DIR: "storage-acceptance-test"
@@ -96,3 +99,37 @@ fossa-analyze:
   image: $CI_REGISTRY/divido/fossa-with-cache:v0.9-jdk17
 fossa-check-notice:
   image: $CI_REGISTRY/divido/fossa-with-cache:v0.9-jdk17
+
+# Schemathesis jobs load schemathesis-tests/schemathesis.toml via
+# SCHEMATHESIS_CONFIG_FILE when present (see reporting/schemathesis.yml).
+.schemathesis-storage-common:
+  variables:
+    # schemathesis-base latest image from master
+    SCHEMATHESIS_BASE_IMAGE: community.opengroup.org:5555/osdu/platform/system/sdks/schemathesis-base:latest
+
+.schemathesis-storage-matrix:
+  parallel:
+    matrix:
+      - SCHEMATHESIS_OPENAPI_YAML_ROUTE:
+          - "/api/storage/v2/api-docs.yaml"
+
+schemathesis-dev-tests:
+  extends:
+    - .cimpl-dev-variables
+    - .schemathesis-osdu-main-tests-template
+    - .schemathesis-storage-common
+    - .schemathesis-storage-matrix
+
+schemathesis-dev-backup-tests:
+  extends:
+    - .cimpl-dev-backup-variables
+    - .schemathesis-osdu-main-tests-template
+    - .schemathesis-storage-common
+    - .schemathesis-storage-matrix
+
+schemathesis-prod-tests:
+  extends:
+    - .cimpl-prod-variables
+    - .schemathesis-osdu-main-tests-template
+    - .schemathesis-storage-common
+    - .schemathesis-storage-matrix

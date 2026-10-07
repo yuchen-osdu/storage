@@ -22,15 +22,14 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.security.PermitAll;
 import org.opengroup.osdu.core.common.model.http.AppError;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import jakarta.annotation.security.PermitAll;
 
 @RestController
 @RequestMapping
@@ -43,10 +42,7 @@ public class HealthCheckApi {
       tags = {"health-check-api"})
   @ApiResponses(
       value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "OK",
-            content = {@Content(schema = @Schema(implementation = String.class))}),
+        @ApiResponse(responseCode = "200", description = "OK"),
         @ApiResponse(
             responseCode = "502",
             description = "Bad Gateway",
@@ -56,9 +52,12 @@ public class HealthCheckApi {
             description = "Service Unavailable",
             content = {@Content(schema = @Schema(implementation = AppError.class))})
       })
+  // Public endpoint: empty @SecurityRequirements clears global bearer so the spec has security: [].
+  @SecurityRequirements
   @PermitAll
+  // No produces: probes often send Accept: text/plain; constraining to application/json would 406 them.
   @GetMapping("/liveness_check")
-  ResponseEntity<String> livenessCheck() {
-    return new ResponseEntity<>("Storage service is alive.", HttpStatus.OK);
+  public ResponseEntity<Void> livenessCheck() {
+    return ResponseEntity.ok().build();
   }
 }

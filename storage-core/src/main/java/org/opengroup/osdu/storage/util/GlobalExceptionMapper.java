@@ -18,7 +18,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
-import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.gson.JsonArray;
@@ -52,6 +51,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.io.IOException;
@@ -162,17 +163,124 @@ public class GlobalExceptionMapper extends ResponseEntityExceptionHandler {
                         "Method not found.", e));
     }
 
+    /**
+     * Unsupported {@code Content-Type} on the request (HTTP 415). Without this override,
+     * {@link ResponseEntityExceptionHandler} returns RFC 7807 {@code application/problem+json}.
+     */
+    @Override
+    @NonNull
+    protected ResponseEntity<Object> handleHttpMediaTypeNotSupported(
+            @NonNull org.springframework.web.HttpMediaTypeNotSupportedException e,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request) {
+        return this.getErrorResponse(
+                new AppException(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(), "Unsupported media type.",
+                        e.getMessage(), e));
+    }
+
+    /**
+     * No acceptable representation for the request {@code Accept} header (HTTP 406). Without this
+     * override, {@link ResponseEntityExceptionHandler} returns RFC 7807 {@code application/problem+json}.
+     */
+    @Override
+    @NonNull
+    protected ResponseEntity<Object> handleHttpMediaTypeNotAcceptable(
+            @NonNull org.springframework.web.HttpMediaTypeNotAcceptableException e,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request) {
+        return this.getErrorResponse(
+                new AppException(HttpStatus.NOT_ACCEPTABLE.value(), "Not acceptable.",
+                        e.getMessage(), e));
+    }
+
     @Override
     @NonNull
     protected ResponseEntity<Object> handleHttpMessageNotReadable(@NonNull HttpMessageNotReadableException e,
                                                                   @NonNull HttpHeaders headers,
                                                                   @NonNull HttpStatusCode status,
                                                                   @NonNull WebRequest request) {
-        if (e.getCause() instanceof ValueInstantiationException) {
-            return this.getErrorResponse(
-                    new AppException(HttpStatus.BAD_REQUEST.value(), "Validation error", e.getMessage(), e));
-        }
-        return super.handleHttpMessageNotReadable(e, headers, status, request);
+        return this.getErrorResponse(
+                new AppException(HttpStatus.BAD_REQUEST.value(), "Validation error", e.getMessage(), e));
+    }
+
+    /**
+     * Handles a {@code @PathVariable}/{@code @RequestParam} type conversion failure (e.g. a non-numeric
+     * {@code version} path segment on {@code GET /records/{id}/{version}}), reported via
+     * {@link MethodArgumentTypeMismatchException}. Without this override, Spring's default handling in
+     * {@link ResponseEntityExceptionHandler} returns an RFC 7807 {@code application/problem+json} response,
+     * inconsistent with every other error response in this service. Normalizing here keeps all 400 responses on a
+     * single, consistent {@code application/json} {@link org.opengroup.osdu.core.common.model.http.AppError} shape.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    protected ResponseEntity<Object> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException e) {
+        String errorMessage = String.format("Invalid value '%s' for parameter '%s'", e.getValue(), e.getName());
+        return this.getErrorResponse(
+                new AppException(HttpStatus.BAD_REQUEST.value(), "Validation error", errorMessage, e));
+    }
+
+    /**
+     * Defensive override for Spring MVC's built-in method-validation path
+     * ({@link HandlerMethodValidationException} → RFC 7807 {@code application/problem+json} by default).
+     * <p>
+     * Storage controllers use class-level {@code @Validated}, which skips that path: the AOP proxy
+     * throws {@link ConstraintViolationException} instead (see {@link #handleConstraintValidationException}).
+     * Kept so any controller without {@code @Validated} still returns {@code AppError} rather than
+     * {@code problem+json}.
+     */
+    @Override
+    @NonNull
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(
+            @NonNull HandlerMethodValidationException e,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request) {
+        List<String> errors = new ArrayList<>();
+        e.getAllValidationResults().forEach(result ->
+                result.getResolvableErrors().forEach(error -> {
+                    String message = error.getDefaultMessage();
+                    if (StringUtils.isNotBlank(message)) {
+                        errors.add(message);
+                    }
+                }));
+        String errorMessage = errors.isEmpty() ? "Validation error." : String.join("; ", errors);
+        return this.getErrorResponse(
+                new AppException(HttpStatus.BAD_REQUEST.value(), "Validation error.", errorMessage, e));
+    }
+
+    /**
+     * Missing required {@code @RequestParam} (e.g. {@code kind} on {@code GET /query/records}).
+     * Spring routes this to {@code handleMissingServletRequestParameter}, not
+     * {@link #handleServletRequestBindingException}; without this override the default RFC 7807
+     * {@code application/problem+json} body is returned.
+     */
+    @Override
+    @NonNull
+    protected ResponseEntity<Object> handleMissingServletRequestParameter(
+            @NonNull org.springframework.web.bind.MissingServletRequestParameterException e,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request) {
+        return this.getErrorResponse(
+                new AppException(HttpStatus.BAD_REQUEST.value(), "Validation error.", e.getMessage(), e));
+    }
+
+    /**
+     * Servlet binding failures routed through this hook (e.g. {@code MissingRequestHeaderException} → 400).
+     * Uses Spring's mapped {@code status} so server-side cases like {@code MissingPathVariableException}
+     * (controller mapping bug, default 500) are not rewritten to 400.
+     */
+    @Override
+    @NonNull
+    protected ResponseEntity<Object> handleServletRequestBindingException(
+            @NonNull org.springframework.web.bind.ServletRequestBindingException e,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request) {
+        String reason = status.is4xxClientError() ? "Validation error." : "Server error.";
+        return this.getErrorResponse(
+                new AppException(status.value(), reason, e.getMessage(), e));
     }
 
     public ResponseEntity<Object> getErrorResponse(AppException e) {

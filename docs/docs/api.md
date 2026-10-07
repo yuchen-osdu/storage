@@ -909,6 +909,8 @@ curl --request GET \
 
 ### Replay 
 This API provides a replay ID that enables tracking of the replay operation's status. It's utilized to initiate the replay operation, which reindexes records according to the request type. Presently, two operation values are accepted: "replay" and "reindex." The replay operation utilizes the default service bus, the "recordtopic," while the reindex operation utilizes the "reindex" topic. Currently replay all or replay of single kind is supported.
+
+**Breaking change:** omit `filter` (or send `null`) to replay all kinds. An empty object `"filter": {}` is no longer treated as replay-all; it returns **400** because `filter.kinds` is required when `filter` is present.
 ```
 POST /api/storage/v2/replay
 
