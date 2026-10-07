@@ -260,6 +260,17 @@ public class QueryApiTest {
     }
 
     @Test
+    public void should_notRequireContentType_when_gettingAllRecordsFromKind() throws Exception {
+        // GET /query/records must not declare a "consumes" media type, since GET requests have no body.
+        // A wrongly declared "consumes" causes Spring to reject requests without a Content-Type header
+        // with 415 Unsupported Media Type.
+        Method method = this.sut.getClass().getMethod("getAllRecords", String.class, String.class, Integer.class, String.class);
+        org.springframework.web.bind.annotation.GetMapping annotation = method.getAnnotation(org.springframework.web.bind.annotation.GetMapping.class);
+
+        assertEquals(0, annotation.consumes().length);
+    }
+
+    @Test
     public void should_allowAccessToGetAllRecordsFromKind_when_userBelongsToAdminGroup() throws Exception {
 
         Method method = this.sut.getClass().getMethod("getAllRecords",String.class, String.class, Integer.class, String.class);

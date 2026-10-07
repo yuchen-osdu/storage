@@ -49,6 +49,7 @@ import org.opengroup.osdu.storage.response.CreateUpdateRecordsResponse;
 import org.opengroup.osdu.storage.service.IngestionService;
 import org.opengroup.osdu.storage.service.QueryService;
 import org.opengroup.osdu.storage.service.RecordService;
+import org.opengroup.osdu.storage.util.CollaborationContextHelper;
 import org.opengroup.osdu.storage.util.EncodeDecode;
 import org.opengroup.osdu.storage.validation.api.ValidVersionIds;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,6 +78,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_KIND_PARAM;
+import static org.opengroup.osdu.core.common.model.collaboration.validation.CollaborationContextValidationDoc.X_COLLABORATION_DIRECTIVES_PATTERN;
 
 @RestController
 @RequestMapping("records")
@@ -115,6 +117,7 @@ public class RecordApi {
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "User not authorized to perform the action.",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Invalid acl group.",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
@@ -122,11 +125,11 @@ public class RecordApi {
 	@PutMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
 	@ResponseStatus(HttpStatus.CREATED)
-	public CreateUpdateRecordsResponse createOrUpdateRecords(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false)
+	public CreateUpdateRecordsResponse createOrUpdateRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false)
 															 @Valid @ValidateCollaborationContext String collaborationDirectives,
 															 @Parameter(description = "Skip duplicates when updating records with the same value.") @RequestParam(required = false) boolean skipdupes,
 															 @Parameter(description = "Records to be created/updated") @RequestBody @Valid @NotEmpty @Size(max = 500, message = ValidationDoc.RECORDS_MAX) List<Record> records) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		TransferInfo transfer = ingestionService.createUpdateRecords(skipdupes, records, headers.getUserEmail(), collaborationContext);
 		return createUpdateRecordsResponseMapper.map(transfer, records);
 	}
@@ -134,29 +137,30 @@ public class RecordApi {
 	@Operation(summary = "${recordApi.getRecords.summary}", description = "${recordApi.getRecords.description}",
 			security = {@SecurityRequirement(name = "Authorization")}, tags = {"records"})
 	@ApiResponses(value = {
-			@ApiResponse(responseCode = "200", description = "Record retrieved successfully.", content = {@Content(schema = @Schema(implementation = String.class))}),
+			@ApiResponse(responseCode = "200", description = "Record retrieved successfully.", content = {@Content(schema = @Schema(implementation = RecordInfoQueryResult.class))}),
 			@ApiResponse(responseCode = "400", description = "Bad Request", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "401", description = "Unauthorized", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "404", description = "Record not found.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
+			@ApiResponse(responseCode = "422", description = "Invalid record data format.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable", content = {@Content(schema = @Schema(implementation = AppError.class))})
 	})
 	@GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<RecordInfoQueryResult<Record>> getAllRecords(@Parameter(description = "x-collaboration")
+	public ResponseEntity<RecordInfoQueryResult<Record>> getAllRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
 																	   @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
 																	   @Parameter(description = "Page Size", example = "20") @RequestParam(required = false, defaultValue = "20")
 																	   @Max(value = 100, message = "Value for limit param should be between 1 and 100")
 																	   @Min(value = 1, message = "Value for limit param should be between 1 and 100") Integer limit,
-																	   @Parameter(description = "Filter Kind", example = "tenant1:public:well:1.0.2") @RequestParam(required = false)
+																	   @Parameter(description = "Filter Kind", example = "osdu:public:well:1.0.2") @RequestParam(required = false)
 																	   @Pattern(regexp = ValidationDoc.KIND_REGEX, message = INVALID_KIND_PARAM) String kind,
 																	   @Parameter(description = "Cursor") @RequestParam(required = false) String cursor,
 																	   @Parameter(description = "Get Only soft deleted records in response", example = "true") @RequestParam(required = false, defaultValue = "false") boolean deleted,
 																	   @Parameter(description = "Get records modified after this date", example = "2025-09-04") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") Date modifiedAfterDate,
 																	   @Parameter(description = "Sort Order") @RequestParam(required = false, defaultValue = "DESC") SortOrder sortOrder) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 
 		GetRecordsModel getRecordsModel = GetRecordsModel.builder()
 				.kind(kind)
@@ -185,13 +189,13 @@ public class RecordApi {
 	})
 	@GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<String> getLatestRecordVersion(@Parameter(description = "x-collaboration")
+	public ResponseEntity<String> getLatestRecordVersion(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
 														 @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-														 @Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
+														 @Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
 																 message = ValidationDoc.INVALID_RECORD_ID) String id,
 														 @Parameter(description = "Filter attributes to restrict the returned fields of the record. " +
 																 " Usage: data.{record-data-field-name}.", example = "data.wellName") @RequestParam(name = "attribute", required = false) String[] attributes) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		return new ResponseEntity<String>(this.queryService.getRecordInfo(id, attributes, collaborationContext), HttpStatus.OK);
 	}
 
@@ -199,6 +203,7 @@ public class RecordApi {
 			security = {@SecurityRequirement(name = "Authorization")}, tags = { "records" })
 	@ApiResponses(value = {
 			@ApiResponse(responseCode = "204", description = "Record purged successfully."),
+			@ApiResponse(responseCode = "400", description = "Bad Request (e.g. record id does not belong to the data partition).",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Record not found.",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
@@ -208,11 +213,11 @@ public class RecordApi {
 	})
 	@DeleteMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.ADMIN + "')")
-	public ResponseEntity<Void> purgeRecord(@Parameter(description = "x-collaboration")
+	public ResponseEntity<Void> purgeRecord(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
 											@RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-											@Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
+											@Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
 													message = ValidationDoc.INVALID_RECORD_ID) String id) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		this.recordService.purgeRecord(id, collaborationContext);
 		return new ResponseEntity<Void>(HttpStatus.NO_CONTENT);
 	}
@@ -221,6 +226,7 @@ public class RecordApi {
 			security = {@SecurityRequirement(name = "Authorization")}, tags = { "records" })
 	@ApiResponses(value = {
 			@ApiResponse(responseCode = "204", description = "Record versions purged successfully."),
+			@ApiResponse(responseCode = "400", description = "Bad Request (e.g. record id does not belong to the data partition).",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Record not found.",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
@@ -230,15 +236,15 @@ public class RecordApi {
 	})
 	@DeleteMapping(value = "/{id}/versions", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.ADMIN + "')")
-	public ResponseEntity<Void> purgeRecordVersions(@Parameter(description = "x-collaboration")
+	public ResponseEntity<Void> purgeRecordVersions(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
 											@RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-											@Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id")
+											@Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id")
 														@Pattern(regexp = ValidationDoc.RECORD_ID_REGEX, message = ValidationDoc.INVALID_RECORD_ID) String id,
 											@Parameter(description = "comma separated version Ids", example = "1710393736116773,1710393736116774")
 														@RequestParam(required = false) @ValidVersionIds String versionIds,
 											@Parameter(description = "limit", example = "500") @RequestParam(required = false) Integer limit,
 											@Parameter(description = "from record version to delete", example = "123456789") @RequestParam(name= "from", required = false) Long fromVersion) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		this.recordService.purgeRecordVersions(id, versionIds, limit, fromVersion, headers.getUserEmail(), collaborationContext);
 		return new ResponseEntity<>(HttpStatus.NO_CONTENT);
 	}
@@ -257,10 +263,10 @@ public class RecordApi {
 	})
 	@PostMapping(value = "/{id}:delete", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<Void> deleteRecord(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-											 @Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
+	public ResponseEntity<Void> deleteRecord(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+											 @Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
 													 message = ValidationDoc.INVALID_RECORD_ID) String id) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		this.recordService.deleteRecord(id, this.headers.getUserEmail(), collaborationContext);
 		return new ResponseEntity<Void>(HttpStatus.NO_CONTENT);
 	}
@@ -274,15 +280,18 @@ public class RecordApi {
 			@ApiResponse(responseCode = "401", description = "Unauthorized",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "404", description = "Not Found",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
+			@ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway",  content = {@Content(schema = @Schema(implementation = AppError.class ))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable",  content = {@Content(schema = @Schema(implementation = AppError.class ))})
 	})
 	@PostMapping(value = "/delete", consumes = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<Void> bulkDeleteRecords(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+	public ResponseEntity<Void> bulkDeleteRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
+												  @RequestHeader(name = "x-collaboration", required = false)
+												  @Valid @ValidateCollaborationContext String collaborationDirectives,
 												  @Parameter(description = "recordIds to be deleted") @RequestBody @NotEmpty @Size(max = 500, message = ValidationDoc.RECORDS_MAX) List<String> recordIds) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		this.recordService.bulkDeleteRecords(recordIds, this.headers.getUserEmail(), collaborationContext);
 		return new ResponseEntity<>(HttpStatus.NO_CONTENT);
 	}
@@ -301,14 +310,14 @@ public class RecordApi {
 	})
 	@GetMapping(value = "/{id}/{version}", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<String> getSpecificRecordVersion(@Parameter(description = "x-collaboration")
+	public ResponseEntity<String> getSpecificRecordVersion(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
 														   @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-														   @Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
+														   @Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
 																   message = ValidationDoc.INVALID_RECORD_ID) String id,
 														   @Parameter(description = "Record version", example = "123456789") @PathVariable("version") long version,
 														   @Parameter(description = "Filter attributes to restrict the returned fields of the record. " +
 																   " Usage: data.{record-data-field-name}.", example = "data.wellName")  @RequestParam(name = "attribute", required = false) String[] attributes) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		return new ResponseEntity<String>(this.queryService.getRecordInfo(id, version, attributes, collaborationContext), HttpStatus.OK);
 	}
 
@@ -326,10 +335,10 @@ public class RecordApi {
 	})
 	@GetMapping(value = "/versions/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.VIEWER + "', '" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<RecordVersions> getRecordVersions(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-															@Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
+	public ResponseEntity<RecordVersions> getRecordVersions(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+															@Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
 																	message = ValidationDoc.INVALID_RECORD_ID) String id) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		return new ResponseEntity<RecordVersions>(this.queryService.listVersions(id, collaborationContext), HttpStatus.OK);
 	}
 
@@ -341,18 +350,19 @@ public class RecordApi {
 			@ApiResponse(responseCode = "401", description = "Unauthorized", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "403", description = "Forbidden", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "404", description = "Record not found.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
+			@ApiResponse(responseCode = "415", description = "Unsupported Media Type", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "500", description = "Internal Server Error", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "502", description = "Bad Gateway", content = {@Content(schema = @Schema(implementation = AppError.class))}),
 			@ApiResponse(responseCode = "503", description = "Service Unavailable", content = {@Content(schema = @Schema(implementation = AppError.class))})
 	})
 	@PatchMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = "application/merge-patch+json")
 	@PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-	public ResponseEntity<String> patchRecord(@Parameter(description = "x-collaboration")
+	public ResponseEntity<String> patchRecord(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN))
 											  @RequestHeader(name = "x-collaboration", required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
-											  @Parameter(description = "Record id", example = "tenant1:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
+											  @Parameter(description = "Record id", example = "osdu:well:123456789") @PathVariable("id") @Pattern(regexp = ValidationDoc.RECORD_ID_REGEX,
 													  message = ValidationDoc.INVALID_RECORD_ID) String id,
 											  @Parameter(description = "Data to be patched") @RequestBody @Valid RecordMergePatchRequest recordMergePatchRequest) {
-		Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+		Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
 		String response = recordService.patchRecord(id, recordMergePatchRequest, headers.getUserEmail(), collaborationContext);
 		return ResponseEntity.ok(response);
 	}
