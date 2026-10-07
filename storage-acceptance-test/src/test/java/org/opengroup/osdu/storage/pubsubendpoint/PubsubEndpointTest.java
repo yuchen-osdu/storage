@@ -1,4 +1,4 @@
-// Copyright 2017-2019, Schlumberger
+// Copyright 2017-2026, Schlumberger
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.concurrent.TimeUnit;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,8 @@ import org.opengroup.osdu.storage.util.RecordUtil;
 public final class PubsubEndpointTest extends BaseStorageAcceptanceTest {
 
   private static final long NOW = System.currentTimeMillis();
-  private static final long FIVE_SECOND_LATER = NOW + 5000L;
+  private static final long LEGAL_COMPLIANCE_WAIT_MILLIS =
+      TimeUnit.SECONDS.toMillis(configUtils.getLegalComplianceWaitSeconds());
 
   private static String LEGAL_TAG_1;
   private static String LEGAL_TAG_2;
@@ -41,11 +43,12 @@ public final class PubsubEndpointTest extends BaseStorageAcceptanceTest {
   @Override
   public void setup() throws Exception {
     super.setup();
+    long fiveSecondsLater = NOW + 5000L;
     LEGAL_TAG_1 = getTenantId() + "-storage-" + NOW;
     LEGAL_TAG_2 = LEGAL_TAG_1 + "random2";
     String KIND = getTenantId() + ":test:endtoend:1.1." + NOW;
     RECORD_ID = getTenantId() + ":endtoend:1.1." + NOW;
-    String RECORD_ID_2 = getTenantId() + ":endtoend:1.1." + FIVE_SECOND_LATER;
+    String RECORD_ID_2 = getTenantId() + ":endtoend:1.1." + fiveSecondsLater;
 
     createLegalTag(LEGAL_TAG_1);
     StorageRecord[] record1 = RecordUtil.createDefaultRecords(RECORD_ID, KIND, LEGAL_TAG_1);
@@ -62,8 +65,8 @@ public final class PubsubEndpointTest extends BaseStorageAcceptanceTest {
   public void should_deleteIncompliantLegalTagAndInvalidateRecordsAndNotIngestAgain_whenIncompliantMessageSentToEndpoint()
       throws Exception {
     legalTagClient.delete(LEGAL_TAG_1);
-    // wait until cache of opa will be rebuild
-    Thread.sleep(100000);
+    // wait until cache of opa will be rebuilt
+    Thread.sleep(LEGAL_COMPLIANCE_WAIT_MILLIS);
 
     assertThrows(ClientException.class, () -> storageClient.getRecord(RECORD_ID));
 
@@ -87,4 +90,28 @@ public final class PubsubEndpointTest extends BaseStorageAcceptanceTest {
     storageClient.deleteRecord(recordIdTemp2);
   }
 
+  @Test
+  public void should_rejectUndeleteButAllowSoftDelete_whenRecordSuspendedByIncompliantLegalTag()
+      throws Exception {
+    String MERGE_PATCH_CONTENT_TYPE = "application/merge-patch+json";
+    String RECOVERY_PATCH = "{\"deleted\":false}";
+
+    legalTagClient.delete(LEGAL_TAG_1);
+    // wait until cache of opa will be rebuilt
+    Thread.sleep(LEGAL_COMPLIANCE_WAIT_MILLIS);
+
+    assertThrows(ClientException.class, () -> storageClient.getRecord(RECORD_ID));
+
+    ClientException undeleteSuspended = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(RECORD_ID, MERGE_PATCH_CONTENT_TYPE, RECOVERY_PATCH));
+    assertEquals(HttpStatus.SC_CONFLICT, undeleteSuspended.getStatusCode());
+
+    HttpResponse<Void> softDelete = storageClient.softDeleteRecord(RECORD_ID);
+    assertEquals(HttpStatus.SC_NO_CONTENT, softDelete.statusCode());
+
+    // Still incompliant after the user delete, so undelete stays blocked
+    ClientException undeleteDeleted = assertThrows(ClientException.class,
+        () -> storageClient.patchRecord(RECORD_ID, MERGE_PATCH_CONTENT_TYPE, RECOVERY_PATCH));
+    assertEquals(HttpStatus.SC_CONFLICT, undeleteDeleted.getStatusCode());
+  }
 }

@@ -31,6 +31,7 @@ import org.opengroup.osdu.core.common.model.indexer.DeletionType;
 import org.opengroup.osdu.core.common.model.indexer.OperationType;
 import org.opengroup.osdu.core.common.model.storage.PubSubDeleteInfo;
 import org.opengroup.osdu.core.common.model.storage.RecordMetadata;
+import org.opengroup.osdu.core.common.model.legal.LegalCompliance;
 import org.opengroup.osdu.core.common.model.storage.RecordState;
 import org.opengroup.osdu.core.common.model.tenant.TenantInfo;
 import org.opengroup.osdu.core.common.util.CollaborationContextUtil;
@@ -326,7 +327,8 @@ public class RecordServiceImpl implements RecordService {
 
         RecordMetadata recordMetadata = this.recordRepository.get(recordId, collaborationContext);
         String msg = String.format("Record with id '%s' does not exist", recordId);
-        if ((recordMetadata == null || recordMetadata.getStatus() != RecordState.active) && !isPurgeRequest) {
+        if ((recordMetadata == null || (recordMetadata.getStatus() != RecordState.active
+                && recordMetadata.getStatus() != RecordState.suspended)) && !isPurgeRequest) {
             throw new AppException(HttpStatus.SC_NOT_FOUND, "Record not found", msg);
         }
         if (recordMetadata == null && isPurgeRequest) {
@@ -481,8 +483,8 @@ public class RecordServiceImpl implements RecordService {
 
         try {
             if (patchRequest.getDeleted() == null) {
-                if (recordMetadata.getStatus() == RecordState.deleted) {
-                    //Trying to update a Soft deleted record
+                if (recordMetadata.getStatus() == RecordState.deleted || recordMetadata.getStatus() == RecordState.suspended) {
+                    //Trying to update a Soft deleted or legally suspended record
                     throw new AppException(HttpStatus.SC_BAD_REQUEST, "Record is not in active state, so cannot be patched",
                             "Record is not in active state, so cannot be patched");
                 }
@@ -505,7 +507,15 @@ public class RecordServiceImpl implements RecordService {
 
             } else {
                 //update record metadata status
+                boolean undelete = !patchRequest.getDeleted();
                 RecordState expectedNewStatus = patchRequest.getDeleted() ? RecordState.deleted : RecordState.active;
+
+                // Reviving a legally-withheld record is the compliance handler's authority, not the user's
+                if (undelete && (recordMetadata.getStatus() == RecordState.suspended || isLegalIncompliant(recordMetadata))) {
+                    throw new AppException(HttpStatus.SC_CONFLICT, "Record is legally withheld",
+                            "Record cannot be undeleted while its legal tags are incompliant");
+                }
+
                 if (recordMetadata.getStatus() != expectedNewStatus) {
                     recordMetadata.setStatus(expectedNewStatus);
                     recordMetadata.setModifyTime(System.currentTimeMillis());
@@ -523,6 +533,10 @@ public class RecordServiceImpl implements RecordService {
         } catch (Exception e) {
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Record patch failed", e.getMessage());
         }
+    }
+
+    private boolean isLegalIncompliant(RecordMetadata recordMetadata) {
+        return recordMetadata.getLegal() != null && recordMetadata.getLegal().getStatus() == LegalCompliance.incompliant;
     }
 
     private void validateRequest(RecordMergePatchRequest patchRequest) {
