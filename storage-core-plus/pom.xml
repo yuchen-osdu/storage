@@ -128,7 +128,7 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>core-plus-common-lib</artifactId>
-            <version>0.27.0-rc3</version>
+            <version>1.0.0</version>
         </dependency>
         <!--
             os-core-common declares lettuce-core as provided. core-plus is packaged
@@ -142,17 +142,17 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-oqm-core</artifactId>
-            <version>0.28.2</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-osm-core</artifactId>
-            <version>0.27.5</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-obm-core</artifactId>
-            <version>0.30.5</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback.contrib</groupId>
@@ -188,14 +188,13 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.1</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-junit-jupiter</artifactId>
-            <version>5.7.0</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <!--TODO used only in TypeMapper.class, dependency should be removed later when clean dev env is created.-->
@@ -207,7 +206,7 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>apd-core</artifactId>
-            <version>0.26.0</version>
+            <version>1.0.0</version>
         </dependency>
 
         <dependency>
@@ -221,7 +220,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>${spring-boot-maven-plugin.version}</version>
                 <configuration>
                     <profiles>
                         <profile>
@@ -248,8 +247,12 @@
                         </goals>
                         <configuration>
                             <classifier>spring-boot</classifier>
+                            <!-- ZIP layout: Main-Class is PropertiesLauncher (Boot 3.2+ package
+                                 org.springframework.boot.loader.launch). Required for
+                                 -Dloader.path=plugins/ in the CIMPL image. -->
+                            <layout>ZIP</layout>
                             <mainClass>
-                                org.springframework.boot.loader.PropertiesLauncher
+                                org.opengroup.osdu.storage.provider.gcp.StorageCorePlusApplication
                             </mainClass>
                         </configuration>
                     </execution>
@@ -267,19 +270,21 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.2</version>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <argLine>
                         @{argLine} --add-opens java.base/java.util=ALL-UNNAMED
                         --add-opens java.base/java.lang=ALL-UNNAMED
                     </argLine>
+                    <useFile>false</useFile>
+                    <trimStackTrace>false</trimStackTrace>
                 </configuration>
             </plugin>
 
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.10</version>
+                <version>${jacoco-maven-plugin.version}</version>
                 <executions>
                     <execution>
                         <goals>

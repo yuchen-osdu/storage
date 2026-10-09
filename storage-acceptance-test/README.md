@@ -1,6 +1,6 @@
 ### Storage acceptance tests
 
-End-to-end tests for the OSDU Storage service. Tests use **[os-core-test](https://community.opengroup.org/osdu/platform/system/lib/core/os-core-test) `0.2.12`** for HTTP clients, authentication, and shared acceptance-test infrastructure.
+End-to-end tests for the OSDU Storage service. Tests use **[os-core-test](https://community.opengroup.org/osdu/platform/system/lib/core/os-core-test) `1.0.0`** for HTTP clients, authentication, and shared acceptance-test infrastructure.
 
 ### Prerequisites
 
