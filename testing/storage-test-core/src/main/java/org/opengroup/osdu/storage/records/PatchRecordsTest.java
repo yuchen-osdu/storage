@@ -275,6 +275,26 @@ public abstract class PatchRecordsTest extends TestBase {
         TestUtils.send("records/" + decimalRecordId, "DELETE", headers, "", "");
     }
 
+    @Test
+    public void should_preserveNumberRepresentation_ofPatchedData_whenRecordIsMergePatched() throws Exception {
+        String decimalRecordId = TenantUtils.getFirstTenantName() + ":test:mergepatchvalue." + System.currentTimeMillis();
+        Map<String, String> headers = HeaderUtils.getHeaders(TenantUtils.getTenantName(), testUtils.getToken());
+        CloseableHttpResponse response = TestUtils.send("records", "PUT", headers,
+                RecordUtil.createJsonRecordWithDecimalData(decimalRecordId, KIND, LEGAL_TAG), "");
+        assertEquals(HttpStatus.SC_CREATED, response.getCode());
+
+        CloseableHttpResponse patchResponse = TestUtils.sendWithCustomMediaType("records/" + decimalRecordId, "PATCH", headers,
+                "application/merge-patch+json", "{\"data\":{\"patchedDecimal\":2.500,\"patchedLarge\":1234567890123456.50}}", "");
+        assertEquals(HttpStatus.SC_OK, patchResponse.getCode());
+
+        response = TestUtils.send("records/" + decimalRecordId, "GET", headers, "", "");
+        String responseString = TestUtils.getResult(response, 200, String.class);
+        assertTrue("patchedDecimal not preserved in " + responseString, responseString.contains("\"patchedDecimal\":2.500"));
+        assertTrue("patchedLarge not preserved in " + responseString, responseString.contains("\"patchedLarge\":1234567890123456.50"));
+
+        TestUtils.send("records/" + decimalRecordId, "DELETE", headers, "", "");
+    }
+
     private String getPatchPayload(List<String> records, boolean isMetaUpdate, boolean isDataUpdate) {
         JsonArray recordsJson = new JsonArray();
         for (String record : records) {
