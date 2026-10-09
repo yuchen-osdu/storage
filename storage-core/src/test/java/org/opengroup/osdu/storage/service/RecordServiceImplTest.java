@@ -58,6 +58,7 @@ import org.opengroup.osdu.storage.util.api.RecordUtil;
 import org.opengroup.osdu.storage.validation.RequestValidationException;
 import org.opengroup.osdu.storage.validation.api.JsonMergePatchValidator;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -1223,6 +1224,38 @@ public class RecordServiceImplTest {
         assertEquals("1000003872", gson.toJson(data.get("large")));
         assertEquals("1234567890123456.50", gson.toJson(data.get("largeDecimal")));
         assertEquals("100.0", gson.toJson(data.get("round")));
+    }
+
+    @Test
+    public void should_patchRecord_preservingNumberRepresentation_ofPatchedData() throws Exception {
+        String recordId = "test:record:123";
+        String user = "test@tenant.com";
+        RecordMergePatchRequest patchRequest = new RecordMergePatchRequest();
+        Map<String, Object> updateData = new HashMap<>();
+        updateData.put("patchedDecimal", new BigDecimal("2.500"));
+        updateData.put("patchedLarge", new BigDecimal("1234567890123456.50"));
+        patchRequest.setData(updateData);
+
+        RecordMetadata existingRecord = createRecordMetadata(asList("1"));
+        existingRecord.setId(recordId);
+        existingRecord.setStatus(RecordState.active);
+
+        String existingRecordJson = "{\"id\":\"" + recordId + "\",\"data\":{\"patchedDecimal\":1.0,"
+                + "\"untouched\":9.900}}";
+
+        when(recordRepository.get(recordId, EMPTY_COLLABORATION_CONTEXT)).thenReturn(existingRecord);
+        when(dataAuthorizationService.validateOwnerAccess(existingRecord, OperationType.update)).thenReturn(true);
+        when(queryService.getRecordInfo(recordId, new String[]{}, EMPTY_COLLABORATION_CONTEXT, true)).thenReturn(existingRecordJson);
+
+        this.sut.patchRecord(recordId, patchRequest, user, EMPTY_COLLABORATION_CONTEXT);
+
+        ArgumentCaptor<List<Record>> recordsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(ingestionService).createUpdateRecords(eq(true), recordsCaptor.capture(), eq(user), eq(EMPTY_COLLABORATION_CONTEXT));
+        Map<String, Object> data = recordsCaptor.getValue().get(0).getData();
+        Gson gson = new Gson();
+        assertEquals("2.500", gson.toJson(data.get("patchedDecimal")));
+        assertEquals("1234567890123456.50", gson.toJson(data.get("patchedLarge")));
+        assertEquals("9.900", gson.toJson(data.get("untouched")));
     }
 
     @Test

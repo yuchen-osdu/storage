@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.cfg.JsonNodeFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.fge.jsonpatch.JsonPatch;
 import com.github.fge.jsonpatch.JsonPatchException;
 import org.apache.http.HttpStatus;
@@ -38,6 +39,7 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 
@@ -67,6 +69,28 @@ public class JsonPatchUtil {
             LOGGER.error("JsonProcessingException during patch operation", e);
             throw new AppException(HttpStatus.SC_BAD_REQUEST, "Bad input for JsonPatch operation", "JsonProcessingException during patch operation", e);
         }
+    }
+
+    public static JsonNode applyMergePatch(JsonNode target, JsonNode patch) {
+        if (patch == null || !patch.isObject()) {
+            return patch == null ? null : patch.deepCopy();
+        }
+
+        ObjectNode result = (target != null && target.isObject())
+                ? ((ObjectNode) target).deepCopy()
+                : objectMapper.createObjectNode();
+
+        for (Map.Entry<String, JsonNode> field : patch.properties()) {
+            String key = field.getKey();
+            JsonNode value = field.getValue();
+            if (value.isNull()) {
+                result.remove(key);
+            } else {
+                result.set(key, applyMergePatch(result.get(key), value));
+            }
+        }
+
+        return result;
     }
 
     public static boolean isDataOrMetaBeingUpdated (JsonPatch jsonPatch) {

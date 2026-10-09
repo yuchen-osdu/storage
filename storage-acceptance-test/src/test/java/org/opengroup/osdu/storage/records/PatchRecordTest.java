@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import java.util.Map;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,14 @@ public class PatchRecordTest extends BaseRecordsAcceptanceTest {
         "tags": {
           "environment": "production",
           "project": "test-project"
+        }
+      }""";
+
+  private static final String DECIMAL_PATCH_BODY = """
+      {
+        "data": {
+          "patchedDecimal": 2.500,
+          "patchedLarge": 1234567890123456.50
         }
       }""";
 
@@ -97,6 +106,15 @@ public class PatchRecordTest extends BaseRecordsAcceptanceTest {
     assertRecordJsonContains(decimalRecordId, RecordUtil.DECIMAL_DATA_FRAGMENTS);
 
     storageClient.deleteRecord(decimalRecordId);
+  }
+
+  @Test
+  public void should_preserveNumberRepresentation_ofPatchedData_whenDataIsPatched() throws Exception {
+    HttpResponse<StorageRecord> patchResponse = storageClient.patchRecord(recordId, MERGE_PATCH_CONTENT_TYPE, DECIMAL_PATCH_BODY);
+    assertEquals(HttpStatus.SC_OK, patchResponse.statusCode());
+
+    assertRecordJsonContains(recordId,
+        List.of("\"patchedDecimal\":2.500", "\"patchedLarge\":1234567890123456.50"));
   }
 
   @Test

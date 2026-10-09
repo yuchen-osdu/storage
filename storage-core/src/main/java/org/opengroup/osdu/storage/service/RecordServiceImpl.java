@@ -17,7 +17,6 @@ package org.opengroup.osdu.storage.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -42,6 +41,7 @@ import org.opengroup.osdu.storage.model.RecordChangedV2Delete;
 import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
 import org.opengroup.osdu.storage.provider.interfaces.IMessageBus;
 import org.opengroup.osdu.storage.provider.interfaces.IRecordsMetadataRepository;
+import org.opengroup.osdu.storage.util.JsonPatchUtil;
 import org.opengroup.osdu.storage.util.api.RecordUtil;
 import org.opengroup.osdu.storage.validation.ValidationDoc;
 import org.opengroup.osdu.storage.validation.api.JsonMergePatchValidator;
@@ -495,8 +495,7 @@ public class RecordServiceImpl implements RecordService {
 
                 cleanedPatchNode.remove("deleted");
                 cleanedPatchNode.remove("deletedAt");
-                JsonMergePatch jsonMergePatch = JsonMergePatch.fromJson(cleanedPatchNode);
-                JsonNode updatedJsonNode = jsonMergePatch.apply(objectMapper.readTree(existingRecordJson));
+                JsonNode updatedJsonNode = JsonPatchUtil.applyMergePatch(objectMapper.readTree(existingRecordJson), cleanedPatchNode);
 
                 Record updatedRecord = objectMapper.treeToValue(updatedJsonNode, Record.class);
 
