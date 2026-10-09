@@ -2074,10 +2074,10 @@ components:
                   lineNumber:
                     type: integer
                     format: int32
-                  nativeMethod:
-                    type: boolean
                   className:
                     type: string
+                  nativeMethod:
+                    type: boolean
             message:
               type: string
             suppressed:
@@ -2103,10 +2103,10 @@ components:
                         lineNumber:
                           type: integer
                           format: int32
-                        nativeMethod:
-                          type: boolean
                         className:
                           type: string
+                        nativeMethod:
+                          type: boolean
                   message:
                     type: string
                   localizedMessage:
@@ -2131,10 +2131,10 @@ components:
               lineNumber:
                 type: integer
                 format: int32
-              nativeMethod:
-                type: boolean
               className:
                 type: string
+              nativeMethod:
+                type: boolean
         notDeletedRecords:
           type: array
           items:
@@ -2164,10 +2164,10 @@ components:
                     lineNumber:
                       type: integer
                       format: int32
-                    nativeMethod:
-                      type: boolean
                     className:
                       type: string
+                    nativeMethod:
+                      type: boolean
               message:
                 type: string
               localizedMessage:

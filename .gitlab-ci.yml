@@ -2,7 +2,10 @@ variables:
   AZURE_SERVICE: storage
   AZURE_BUILD_SUBDIR: provider/storage-azure
   AZURE_TEST_SUBDIR: testing/storage-test-azure
-  SERVICE_JAVA_VERSION: "17"
+  # Full Docker Hub tag after "maven:" — flip to ...-temurin-25 for Java 25 compile/test.
+  # Keep in sync with SERVICE_JAVA_VERSION (plugin-download jobs).
+  MAVEN_IMAGE_TAG: "3.9.16-eclipse-temurin-25"
+  SERVICE_JAVA_VERSION: "3.9.16-eclipse-temurin-25"
 
   # Discover OpenAPI specs via springdoc swagger-config.
   # Do not set CIMPL_OPENAPI_YAML_ROUTE or CIMPL_OPENAPI_SPEC_PATH — those bypass
@@ -40,6 +43,9 @@ include:
     file: "scanners/gitlab-ultimate.yml"
 
   - project: "osdu/platform/ci-cd-pipelines"
+    file: "scanners/sbom-maven.yml"
+
+  - project: "osdu/platform/ci-cd-pipelines"
     file: "cloud-providers/azure.yml"
 
   - local: "devops/core-plus/pipeline/override-stages.yml"
@@ -50,6 +56,16 @@ include:
   - project: "osdu/platform/ci-cd-pipelines"
     file: "reporting/schemathesis.yml"
 
+# Java 25 FOSSA image (divido/fossa-with-cache!19). Shared fossa-maven.yml still
+# defaults to v0.10 (JDK 17); override until ci-cd-pipelines bumps the default.
+fossa-analyze:
+  image: $CI_REGISTRY/divido/fossa-with-cache:v0.11
+  variables:
+    MAVEN_CLI_OPTS: "--batch-mode --settings=$CI_PROJECT_DIR/.mvn/community-maven.settings.xml -Drevision=${CI_COMMIT_REF_SLUG}-SNAPSHOT"
+
+fossa-check-notice:
+  image: $CI_REGISTRY/divido/fossa-with-cache:v0.11
+
 # disable the eslint scanner
 # I think this is being generated from the presence of an HTML file, but there
 # is no javascript to scan, so the job isn't helpful and just gets in the way
@@ -58,17 +74,17 @@ eslint-sast:
     - when: never
 
 download_plugins:
-  image: maven:3.8.3-openjdk-17-slim
+  image: maven:${SERVICE_JAVA_VERSION}
   stage: build
   variables:
     OSM_PACKAGE_REGISTRY_URL: "https://community.opengroup.org/api/v4/projects/1448/packages/maven"
-    OSM_VERSION: "0.27.5"
+    OSM_VERSION: "1.0.0"
     OBM_PACKAGE_REGISTRY_URL: "https://community.opengroup.org/api/v4/projects/1441/packages/maven"
-    OBM_VERSION: "0.30.6"
+    OBM_VERSION: "1.0.0"
     OQM_PACKAGE_REGISRTY_URL: "https://community.opengroup.org/api/v4/projects/1450/packages/maven"
-    OQM_VERSION: "0.28.2"
+    OQM_VERSION: "1.0.0"
     APD_PACKAGE_REGISTRY_URL: "https://community.opengroup.org/api/v4/projects/1445/packages/maven"
-    APD_VERSION: "0.26.0-rc2"
+    APD_VERSION: "1.0.0"
   artifacts:
     paths:
       - ./tmp/*.jar
@@ -84,21 +100,12 @@ download_plugins:
     variables:
       - $PROTECTED == '1'
 
-gemnasium-maven-dependency_scanning:
-  variables:
-    DS_JAVA_VERSION: 17
-
 azure_containerize:
   variables:
     AZURE_CONTAINERIZE_REPOSITORY: "https://gitlab-ci-token:${CI_JOB_TOKEN}@community.opengroup.org/osdu/platform/deployment-and-operations/base-containers-azure/service-base-image"
 
 azure_test:
   image: community.opengroup.org:5555/osdu/platform/deployment-and-operations/base-containers-azure/azure-maven17:v0.0.1
-
-fossa-analyze:
-  image: $CI_REGISTRY/divido/fossa-with-cache:v0.9-jdk17
-fossa-check-notice:
-  image: $CI_REGISTRY/divido/fossa-with-cache:v0.9-jdk17
 
 # Schemathesis jobs load schemathesis-tests/schemathesis.toml via
 # SCHEMATHESIS_CONFIG_FILE when present (see reporting/schemathesis.yml).
