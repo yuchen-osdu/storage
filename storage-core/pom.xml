@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.opengroup.osdu</groupId>
         <artifactId>os-storage</artifactId>
-        <version>0.30.0-SNAPSHOT</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -67,7 +67,7 @@
             os-core-common 7.0.0 declares lettuce-core as provided scope, which Maven does
             NOT propagate transitively, so consumers of os-core-common must declare lettuce-core
             themselves. Library-level scope=provided so deployable consumers (storage-core-plus,
-            storage-aws, etc.) control the runtime version.
+            storage-azure, etc.) control the runtime version.
         -->
         <dependency>
             <groupId>io.lettuce</groupId>
@@ -175,7 +175,7 @@
 		<dependency>
 			<groupId>org.mockito</groupId>
 			<artifactId>mockito-core</artifactId>
-			<version>5.11.0</version>
+			<version>${mockito.version}</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -204,7 +204,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <argLine>@{argLine} --add-opens java.base/java.lang=ALL-UNNAMED</argLine>
                 </configuration>
@@ -212,7 +212,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.10</version>
+                <version>${jacoco-maven-plugin.version}</version>
                 <configuration>
                     <!-- Keep in sync with sonar.coverage.exclusions above -->
                     <excludes>

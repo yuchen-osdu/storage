@@ -20,11 +20,11 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.opengroup.osdu.storage</groupId>
     <artifactId>storage-acceptance-test</artifactId>
-    <version>0.30.0-SNAPSHOT</version>
+    <version>0.31.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.main.basedir>${project.basedir}</project.main.basedir>
         <allure.version>2.31.0</allure.version>
@@ -32,7 +32,8 @@
         <log4j.version>2.23.0</log4j.version>
         <jackson.version>2.21.2</jackson.version>
         <jackson-databind.version>2.21.2</jackson-databind.version>
-        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+        <os-core-test.version>1.0.1</os-core-test.version>
         <argLine>
             --add-opens java.base/java.lang=ALL-UNNAMED
         </argLine>
@@ -54,12 +55,13 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-core-test</artifactId>
-            <version>0.2.0</version>
+            <version>${os-core-test.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.42</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -68,12 +70,24 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.15.0</version>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.42</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <argLine>@{argLine}</argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

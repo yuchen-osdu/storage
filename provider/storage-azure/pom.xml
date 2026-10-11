@@ -23,18 +23,18 @@
   <parent>
     <artifactId>os-storage</artifactId>
     <groupId>org.opengroup.osdu</groupId>
-    <version>0.30.0-SNAPSHOT</version>
+    <version>${revision}</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <properties>
     <!-- Azure Dependencies -->
-    <core-lib-azure.version>2.5.5</core-lib-azure.version>
+    <core-lib-azure.version>3.0.3</core-lib-azure.version>
     <azure-storage-blob.version>12.29.0</azure-storage-blob.version>
     <nimbus-jose-jwt.version>9.47</nimbus-jose-jwt.version>
     <!-- Plugin Versions -->
-    <surefire-plugin.version>3.2.2</surefire-plugin.version>
-    <jacoco-plugin.version>0.8.12</jacoco-plugin.version>
+    <surefire-plugin.version>${maven-surefire-plugin.version}</surefire-plugin.version>
+    <jacoco-plugin.version>0.8.14</jacoco-plugin.version>
     <!-- JVM Arguments -->
     <argLine>
         --add-opens=java.base/java.util=ALL-UNNAMED
@@ -47,7 +47,14 @@
 
   <dependencyManagement>
       <dependencies>
-        <!-- Core Azure Library -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+<!-- Core Azure Library -->
         <dependency>
           <groupId>org.opengroup.osdu</groupId>
           <artifactId>core-lib-azure</artifactId>

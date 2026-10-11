@@ -22,6 +22,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.opengroup.osdu.core.common.info.VersionInfoBuilder;
 import org.opengroup.osdu.core.common.model.info.VersionInfo;
@@ -45,6 +46,8 @@ public class InfoApi {
   @ApiResponses(value = {
           @ApiResponse(responseCode = "200", description = "OK", content = { @Content(schema = @Schema(implementation = VersionInfo.class)) })
   })
+  // Public endpoint: empty @SecurityRequirements clears global bearer so the spec has security: [].
+  @SecurityRequirements
   @GetMapping(value = "/info", produces = MediaType.APPLICATION_JSON_VALUE)
   public VersionInfo info() throws IOException {
     return versionInfoBuilder.buildVersionInfo();

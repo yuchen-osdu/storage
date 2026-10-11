@@ -1,4 +1,4 @@
-// Copyright 2017-2019, Schlumberger
+// Copyright 2017-2026, Schlumberger
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package org.opengroup.osdu.storage.util;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -32,6 +33,12 @@ import org.opengroup.osdu.core.test.client.model.storage.UpdateRecordsQuery;
 public class RecordUtil {
 
   private static final String UNIT_OF_MEASURE_ID = "unitOfMeasureID";
+
+  public static final List<String> DECIMAL_DATA_FRAGMENTS = List.of(
+      "\"large\":1000003872",
+      "\"largeDecimal\":1234567890123456.50",
+      "\"round\":100.0",
+      "\"small\":0.0001");
 
   public static StorageRecord[] createDefaultRecords(String id, String kind, String legalTag) {
     return single(getDefaultRecordWithDefaultData(id, kind, legalTag));
@@ -63,6 +70,15 @@ public class RecordUtil {
     dataMap.put("custom", data);
     dataMap.put("score-int", 58377304471659395L);
     dataMap.put("score-double", 58377304.471659395);
+    return single(getRecordWithInputData(id, kind, legalTag, dataMap));
+  }
+
+  public static StorageRecord[] createRecordsWithDecimalData(String id, String kind, String legalTag) {
+    Map<String, Object> dataMap = new LinkedHashMap<>();
+    dataMap.put("large", 1000003872);
+    dataMap.put("largeDecimal", new BigDecimal("1234567890123456.50"));
+    dataMap.put("round", new BigDecimal("100.0"));
+    dataMap.put("small", new BigDecimal("0.0001"));
     return single(getRecordWithInputData(id, kind, legalTag, dataMap));
   }
 
@@ -206,18 +222,57 @@ public class RecordUtil {
     return toArray(records);
   }
 
+  // "Y" is intentionally omitted so the X,Y pair fails while LON,LAT is left to prove that pair's
+  // skip is reported rather than silently repeated.
+  public static StorageRecord[] createRecordsWithOneFailingAndOneSucceedingPairOfCoordinates(
+      int recordsNumber, String id, String kind, String legalTag, String fromCrs, String conversionType) {
+    List<StorageRecord> records = new ArrayList<>();
+    for (int i = 0; i < recordsNumber; i++) {
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("X", 16.00);
+      data.put("LON", 16.00);
+      data.put("LAT", 10.00);
+      List<Map<String, Object>> meta = List.of(
+          metaBlock(conversionType, fromCrs, "X", "Y", "LON", "LAT"));
+      StorageRecord base = getDefaultRecord(id + i, kind, legalTag);
+      records.add(withDataAndMeta(base, data, meta));
+    }
+    return toArray(records);
+  }
+
   public static StorageRecord[] createRecordsWithAsIngestedCoordinates(int recordsNumber, String id,
       String kind, String legalTag, String prCRS, String prUNITZ, String geometryType,
       String attributeType) {
+    return createRecordsWithAsIngestedCoordinates(recordsNumber, id, kind, legalTag, prCRS, prUNITZ,
+        geometryType, attributeType, Constants.POINT);
+  }
+
+  // The collection child's discriminator is caller-supplied so the same geometry can be ingested
+  // under either the AnyCrs or the standard spelling.
+  public static StorageRecord[] createRecordsWithAsIngestedCoordinates(int recordsNumber, String id,
+      String kind, String legalTag, String prCRS, String prUNITZ, String geometryType,
+      String attributeType, String collectionChildType) {
     List<StorageRecord> records = new ArrayList<>();
     for (int i = 0; i < recordsNumber; i++) {
       Map<String, Object> data = new LinkedHashMap<>();
       data.put(attributeType, Map.of(Constants.AS_INGESTED_COORDINATES,
-          buildAsIngestedCoordinates(prCRS, prUNITZ, geometryType, false)));
+          buildAsIngestedCoordinates(prCRS, prUNITZ, geometryType, false, collectionChildType)));
       StorageRecord base = getDefaultRecord(id + i, kind, legalTag);
       records.add(withData(base, data));
     }
     return toArray(records);
+  }
+
+  // Builds a collection holding a point and a multi-point whose discriminators the caller names, so
+  // the same geometry can be ingested under either the AnyCrs or the standard spelling.
+  public static StorageRecord[] createRecordsWithGeometryCollection(String id, String kind,
+      String legalTag, String prCRS, String prUNITZ, String pointType, String multiPointType,
+      String attributeType) {
+    Map<String, Object> data = new LinkedHashMap<>();
+    data.put(attributeType, Map.of(Constants.AS_INGESTED_COORDINATES,
+        buildAsIngestedCoordinatesWithGeometryCollection(prCRS, prUNITZ, pointType, multiPointType)));
+    StorageRecord base = getDefaultRecord(id, kind, legalTag);
+    return single(withData(base, data));
   }
 
   public static StorageRecord[] createRecordsWithInvalidAsIngestedCoordinates(int recordsNumber,
@@ -359,8 +414,13 @@ public class RecordUtil {
 
   private static Map<String, Object> buildAsIngestedCoordinates(String prCRS, String prUNITZ,
       String geometryType, boolean invalid) {
+    return buildAsIngestedCoordinates(prCRS, prUNITZ, geometryType, invalid, Constants.POINT);
+  }
+
+  private static Map<String, Object> buildAsIngestedCoordinates(String prCRS, String prUNITZ,
+      String geometryType, boolean invalid, String collectionChildType) {
     Map<String, Object> properties = new LinkedHashMap<>();
-    Map<String, Object> geometry = buildGeometry(geometryType);
+    Map<String, Object> geometry = buildGeometry(geometryType, collectionChildType);
     Map<String, Object> feature = new LinkedHashMap<>();
     feature.put(Constants.BBOX, null);
     feature.put(Constants.TYPE, Constants.ANY_CRS_FEATURE);
@@ -381,7 +441,46 @@ public class RecordUtil {
     return asIngested;
   }
 
-  private static Map<String, Object> buildGeometry(String geometryType) {
+  private static Map<String, Object> buildAsIngestedCoordinatesWithGeometryCollection(String prCRS,
+      String prUNITZ, String pointType, String multiPointType) {
+    Map<String, Object> properties = new LinkedHashMap<>();
+    Map<String, Object> geometry = buildGeometryCollectionOfTwoMembers(pointType, multiPointType);
+    Map<String, Object> feature = new LinkedHashMap<>();
+    feature.put(Constants.BBOX, null);
+    feature.put(Constants.TYPE, Constants.ANY_CRS_FEATURE);
+    feature.put(Constants.PROPERTIES, properties);
+    feature.put(Constants.GEOMETRY, geometry);
+    List<Map<String, Object>> features = List.of(feature);
+
+    Map<String, Object> asIngested = new LinkedHashMap<>();
+    asIngested.put(Constants.PERSISTABLE_REFERENCE_CRS, prCRS);
+    asIngested.put(Constants.PERSISTABLE_REFERENCE_UNIT_Z, prUNITZ);
+    asIngested.put(Constants.TYPE, Constants.ANY_CRS_FEATURE_COLLECTION);
+    asIngested.put(Constants.PROPERTIES, properties);
+    asIngested.put(Constants.FEATURES, features);
+    return asIngested;
+  }
+
+  private static Map<String, Object> buildGeometryCollectionOfTwoMembers(String pointType,
+      String multiPointType) {
+    Map<String, Object> pointGeometry = new LinkedHashMap<>();
+    pointGeometry.put(Constants.BBOX, null);
+    pointGeometry.put(Constants.TYPE, pointType);
+    pointGeometry.put(Constants.COORDINATES, createCoordinates1(1, 2));
+
+    Map<String, Object> multiPointGeometry = new LinkedHashMap<>();
+    multiPointGeometry.put(Constants.BBOX, null);
+    multiPointGeometry.put(Constants.TYPE, multiPointType);
+    multiPointGeometry.put(Constants.COORDINATES, createCoordinates2(1, 2));
+
+    Map<String, Object> geometry = new LinkedHashMap<>();
+    geometry.put(Constants.GEOMETRIES, List.of(pointGeometry, multiPointGeometry));
+    geometry.put(Constants.TYPE, Constants.ANY_CRS_GEOMETRY_COLLECTION);
+    geometry.put(Constants.BBOX, null);
+    return geometry;
+  }
+
+  private static Map<String, Object> buildGeometry(String geometryType, String collectionChildType) {
     Map<String, Object> geometry = new LinkedHashMap<>();
     switch (geometryType) {
       case Constants.ANY_CRS_POINT:
@@ -401,7 +500,7 @@ public class RecordUtil {
       case Constants.ANY_CRS_GEOMETRY_COLLECTION:
         Map<String, Object> pointGeometry = new LinkedHashMap<>();
         pointGeometry.put(Constants.BBOX, null);
-        pointGeometry.put(Constants.TYPE, Constants.POINT);
+        pointGeometry.put(Constants.TYPE, collectionChildType);
         pointGeometry.put(Constants.COORDINATES, createCoordinates1(1, 2));
         geometry.put(Constants.GEOMETRIES, List.of(pointGeometry));
         break;

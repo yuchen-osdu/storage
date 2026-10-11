@@ -1,4 +1,4 @@
-// Copyright 2017-2019, Schlumberger
+// Copyright 2017-2026, Schlumberger
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
 package org.opengroup.osdu.storage.service;
 
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.opengroup.osdu.storage.di.TestJsonMappers;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,7 +38,10 @@ import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
 import org.opengroup.osdu.core.common.model.indexer.DeletionType;
 import org.opengroup.osdu.core.common.model.indexer.OperationType;
+import org.opengroup.osdu.core.common.model.legal.Legal;
+import org.opengroup.osdu.core.common.model.legal.LegalCompliance;
 import org.opengroup.osdu.core.common.model.storage.PubSubDeleteInfo;
+import org.opengroup.osdu.core.common.model.storage.Record;
 import org.opengroup.osdu.core.common.model.storage.RecordMetadata;
 import org.opengroup.osdu.core.common.model.storage.RecordState;
 import org.opengroup.osdu.core.common.model.tenant.TenantInfo;
@@ -53,6 +58,7 @@ import org.opengroup.osdu.storage.util.api.RecordUtil;
 import org.opengroup.osdu.storage.validation.RequestValidationException;
 import org.opengroup.osdu.storage.validation.api.JsonMergePatchValidator;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -71,6 +77,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -123,14 +130,15 @@ public class RecordServiceImplTest {
 
     @Mock
     private DpsHeaders headers;
-    @Spy
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock
     private TenantInfo tenant;
 
     @Mock
     private RecordUtil recordUtil;
+
+    @Spy
+    private ObjectMapper objectMapper = TestJsonMappers.objectMapper();
 
     @InjectMocks
     private RecordServiceImpl sut;
@@ -861,6 +869,33 @@ public class RecordServiceImplTest {
     }
 
     @Test
+    public void should_softDeleteAndKeepLegalStatus_when_deletingSuspendedRecord() {
+        RecordMetadata record = new RecordMetadata();
+        record.setKind("any kind");
+        record.setId(RECORD_ID);
+        record.setStatus(RecordState.suspended);
+        Legal legal = new Legal();
+        legal.setStatus(LegalCompliance.incompliant);
+        record.setLegal(legal);
+
+        when(this.recordRepository.get(RECORD_ID, Optional.empty())).thenReturn(record);
+        when(this.dataAuthorizationService.validateOwnerAccess(any(), any())).thenReturn(true);
+
+        this.sut.deleteRecord(RECORD_ID, "anyUserName", Optional.empty());
+
+        verify(this.recordRepository).createOrUpdate(eq(singletonList(record)), any());
+        verify(this.auditLogger).deleteRecordSuccess(singletonList(RECORD_ID));
+        assertEquals(RecordState.deleted, record.getStatus());
+        assertEquals(LegalCompliance.incompliant, record.getLegal().getStatus());
+        assertEquals("anyUserName", record.getModifyUser());
+
+        ArgumentCaptor<PubSubDeleteInfo> pubsubMessageCaptor = ArgumentCaptor.forClass(PubSubDeleteInfo.class);
+        verify(this.pubSubClient).publishMessage(eq(this.headers), pubsubMessageCaptor.capture());
+        assertEquals(RECORD_ID, pubsubMessageCaptor.getValue().getId());
+        assertEquals(DeletionType.soft, pubsubMessageCaptor.getValue().getDeletionType());
+    }
+
+    @Test
     public void shouldDeleteRecords_successfully_when_collaborationFFIsDisabled() {
         RecordMetadata record = buildRecordMetadata();
         Map<String, RecordMetadata> expectedRecordMetadataMap = new HashMap<String, RecordMetadata>() {{
@@ -1160,6 +1195,70 @@ public class RecordServiceImplTest {
     }
 
     @Test
+    public void should_patchRecord_preservingNumberRepresentation_ofExistingData() throws Exception {
+        String recordId = "test:record:123";
+        String user = "test@tenant.com";
+        RecordMergePatchRequest patchRequest = new RecordMergePatchRequest();
+        Map<String, Object> updateData = new HashMap<>();
+        updateData.put("name", "Updated Name");
+        patchRequest.setData(updateData);
+
+        RecordMetadata existingRecord = createRecordMetadata(asList("1"));
+        existingRecord.setId(recordId);
+        existingRecord.setStatus(RecordState.active);
+
+        String existingRecordJson = "{\"id\":\"" + recordId + "\",\"data\":{\"name\":\"Original Name\","
+                + "\"large\":1000003872,\"largeDecimal\":1234567890123456.50,\"round\":100.0}}";
+
+        when(recordRepository.get(recordId, EMPTY_COLLABORATION_CONTEXT)).thenReturn(existingRecord);
+        when(dataAuthorizationService.validateOwnerAccess(existingRecord, OperationType.update)).thenReturn(true);
+        when(queryService.getRecordInfo(recordId, new String[]{}, EMPTY_COLLABORATION_CONTEXT, true)).thenReturn(existingRecordJson);
+
+        this.sut.patchRecord(recordId, patchRequest, user, EMPTY_COLLABORATION_CONTEXT);
+
+        ArgumentCaptor<List<Record>> recordsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(ingestionService).createUpdateRecords(eq(true), recordsCaptor.capture(), eq(user), eq(EMPTY_COLLABORATION_CONTEXT));
+        Map<String, Object> data = recordsCaptor.getValue().get(0).getData();
+        Gson gson = new Gson();
+        assertEquals("Updated Name", data.get("name"));
+        assertEquals("1000003872", gson.toJson(data.get("large")));
+        assertEquals("1234567890123456.50", gson.toJson(data.get("largeDecimal")));
+        assertEquals("100.0", gson.toJson(data.get("round")));
+    }
+
+    @Test
+    public void should_patchRecord_preservingNumberRepresentation_ofPatchedData() throws Exception {
+        String recordId = "test:record:123";
+        String user = "test@tenant.com";
+        RecordMergePatchRequest patchRequest = new RecordMergePatchRequest();
+        Map<String, Object> updateData = new HashMap<>();
+        updateData.put("patchedDecimal", new BigDecimal("2.500"));
+        updateData.put("patchedLarge", new BigDecimal("1234567890123456.50"));
+        patchRequest.setData(updateData);
+
+        RecordMetadata existingRecord = createRecordMetadata(asList("1"));
+        existingRecord.setId(recordId);
+        existingRecord.setStatus(RecordState.active);
+
+        String existingRecordJson = "{\"id\":\"" + recordId + "\",\"data\":{\"patchedDecimal\":1.0,"
+                + "\"untouched\":9.900}}";
+
+        when(recordRepository.get(recordId, EMPTY_COLLABORATION_CONTEXT)).thenReturn(existingRecord);
+        when(dataAuthorizationService.validateOwnerAccess(existingRecord, OperationType.update)).thenReturn(true);
+        when(queryService.getRecordInfo(recordId, new String[]{}, EMPTY_COLLABORATION_CONTEXT, true)).thenReturn(existingRecordJson);
+
+        this.sut.patchRecord(recordId, patchRequest, user, EMPTY_COLLABORATION_CONTEXT);
+
+        ArgumentCaptor<List<Record>> recordsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(ingestionService).createUpdateRecords(eq(true), recordsCaptor.capture(), eq(user), eq(EMPTY_COLLABORATION_CONTEXT));
+        Map<String, Object> data = recordsCaptor.getValue().get(0).getData();
+        Gson gson = new Gson();
+        assertEquals("2.500", gson.toJson(data.get("patchedDecimal")));
+        assertEquals("1234567890123456.50", gson.toJson(data.get("patchedLarge")));
+        assertEquals("9.900", gson.toJson(data.get("untouched")));
+    }
+
+    @Test
     public void should_patchRecord_when_statusChangeFromDeletedToActive() throws Exception {
         // Arrange
         String recordId = "test:record:789";
@@ -1214,6 +1313,84 @@ public class RecordServiceImplTest {
         // Assert
         assertNotNull(result);
         assertEquals(RecordState.deleted, existingRecord.getStatus());
+    }
+
+    @Test
+    public void should_rejectUndelete_when_recordIsSuspended() {
+        RecordMetadata existingRecord = stubPatchTarget("test:record:suspended", RecordState.suspended, LegalCompliance.incompliant);
+
+        AppException exception = assertThrows(AppException.class,
+                () -> this.sut.patchRecord(existingRecord.getId(), patchStatusRequest(false), "test@tenant.com", EMPTY_COLLABORATION_CONTEXT));
+
+        assertEquals(HttpStatus.SC_CONFLICT, exception.getError().getCode());
+        assertEquals(RecordState.suspended, existingRecord.getStatus());
+        verify(this.persistenceService, never()).updateMetadataAndPublishRecordChangeEvent(any(), any());
+    }
+
+    @Test
+    public void should_rejectUndelete_when_deletedRecordHasIncompliantLegalStatus() {
+        RecordMetadata existingRecord = stubPatchTarget("test:record:deleted-incompliant", RecordState.deleted, LegalCompliance.incompliant);
+
+        AppException exception = assertThrows(AppException.class,
+                () -> this.sut.patchRecord(existingRecord.getId(), patchStatusRequest(false), "test@tenant.com", EMPTY_COLLABORATION_CONTEXT));
+
+        assertEquals(HttpStatus.SC_CONFLICT, exception.getError().getCode());
+        assertEquals(RecordState.deleted, existingRecord.getStatus());
+        verify(this.persistenceService, never()).updateMetadataAndPublishRecordChangeEvent(any(), any());
+    }
+
+    @Test
+    public void should_undelete_when_deletedRecordHasCompliantLegalStatus() {
+        RecordMetadata existingRecord = stubPatchTarget("test:record:deleted-compliant", RecordState.deleted, LegalCompliance.compliant);
+
+        this.sut.patchRecord(existingRecord.getId(), patchStatusRequest(false), "test@tenant.com", EMPTY_COLLABORATION_CONTEXT);
+
+        assertEquals(RecordState.active, existingRecord.getStatus());
+        verify(this.persistenceService).updateMetadataAndPublishRecordChangeEvent(existingRecord, EMPTY_COLLABORATION_CONTEXT);
+    }
+
+    @Test
+    public void should_keepLegalStatus_when_userDeletesSuspendedRecord() {
+        RecordMetadata existingRecord = stubPatchTarget("test:record:suspended-delete", RecordState.suspended, LegalCompliance.incompliant);
+
+        this.sut.patchRecord(existingRecord.getId(), patchStatusRequest(true), "test@tenant.com", EMPTY_COLLABORATION_CONTEXT);
+
+        assertEquals(RecordState.deleted, existingRecord.getStatus());
+        assertEquals(LegalCompliance.incompliant, existingRecord.getLegal().getStatus());
+    }
+
+    @Test
+    public void should_rejectContentPatch_when_recordIsSuspended() {
+        RecordMetadata existingRecord = stubPatchTarget("test:record:suspended-content", RecordState.suspended, LegalCompliance.incompliant);
+        RecordMergePatchRequest patchRequest = new RecordMergePatchRequest();
+        patchRequest.setData(new HashMap<>(Map.of("name", "Updated Name")));
+
+        AppException exception = assertThrows(AppException.class,
+                () -> this.sut.patchRecord(existingRecord.getId(), patchRequest, "test@tenant.com", EMPTY_COLLABORATION_CONTEXT));
+
+        assertEquals(HttpStatus.SC_BAD_REQUEST, exception.getError().getCode());
+        verify(this.ingestionService, never()).createUpdateRecords(anyBoolean(), any(), any(), any());
+    }
+
+    private RecordMergePatchRequest patchStatusRequest(boolean deleted) {
+        RecordMergePatchRequest patchRequest = new RecordMergePatchRequest();
+        patchRequest.setDeleted(deleted);
+        return patchRequest;
+    }
+
+    private RecordMetadata stubPatchTarget(String recordId, RecordState status, LegalCompliance legalStatus) {
+        RecordMetadata existingRecord = createRecordMetadata(List.of("1"));
+        existingRecord.setId(recordId);
+        existingRecord.setStatus(status);
+        Legal legal = new Legal();
+        legal.setStatus(legalStatus);
+        existingRecord.setLegal(legal);
+
+        when(this.recordRepository.get(recordId, EMPTY_COLLABORATION_CONTEXT)).thenReturn(existingRecord);
+        when(this.dataAuthorizationService.validateOwnerAccess(existingRecord, OperationType.update)).thenReturn(true);
+        when(this.queryService.getRecordInfo(recordId, new String[]{}, EMPTY_COLLABORATION_CONTEXT, true))
+                .thenReturn("{\"id\":\"" + recordId + "\",\"data\":{\"name\":\"Record\"}}");
+        return existingRecord;
     }
 
     @Test
