@@ -41,9 +41,9 @@ In the current version, the mappers are equipped with several drivers to the sto
 ### Requirements:
 
 1. Mandatory
-   - JDK 17
-   - Lombok 1.28 or later
-   - Maven
+   - [JDK 25](https://adoptium.net/)
+   - [Maven 3.9.16+](https://maven.apache.org/download.cgi)
+   - Lombok 1.18 or later
 
 ### Baremetal Service Configuration:
 [Baremetal service configuration ](docs/baremetal/README.md)
@@ -55,9 +55,9 @@ Check that maven is installed:
 
 ```bash
 $ mvn --version
-Apache Maven 3.6.0
+Apache Maven 3.9.16
 Maven home: /usr/share/maven
-Java version: 17.0.7
+Java version: 25.0.1
 ...
 ```
 

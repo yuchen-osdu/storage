@@ -33,6 +33,7 @@ import org.opengroup.osdu.storage.request.ReplayRequest;
 import org.opengroup.osdu.storage.response.ReplayStatusResponse;
 import org.opengroup.osdu.storage.response.ReplayResponse;
 import org.opengroup.osdu.storage.service.replay.ReplayService;
+import org.opengroup.osdu.storage.util.CollaborationContextHelper;
 import org.opengroup.osdu.storage.util.GlobalExceptionMapper;
 import org.opengroup.osdu.storage.util.Role;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,13 +73,14 @@ public class ReplayApi {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "403", description = "Forbidden", content = {@Content(schema = @Schema(implementation = AppError.class))}),
+            @ApiResponse(responseCode = "404", description = "Replay ID does not exist.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "500", description = "Internal Server Error", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "502", description = "Bad Gateway", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "503", description = "Service Unavailable", content = {@Content(schema = @Schema(implementation = AppError.class))})
     })
     @GetMapping(value = "/status/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("@authorizationFilter.hasRole('" + Role.USER_OPS + "')")
-    public ResponseEntity<ReplayStatusResponse> getReplayStatus(@PathVariable("id") String id) {
+    public ResponseEntity<ReplayStatusResponse> getReplayStatus(@Parameter(description = "Replay id", example = "f506be08-b51f-4cdd-a9ee-d9454ad51600") @PathVariable("id") String id) {
 
         return new ResponseEntity<>(replayService.getReplayStatus(id), HttpStatus.OK);
     }
@@ -91,16 +93,23 @@ public class ReplayApi {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "403", description = "Forbidden", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "500", description = "Internal Server Error", content = {@Content(schema = @Schema(implementation = AppError.class))}),
+            @ApiResponse(responseCode = "501", description = "Collaboration feature is not yet supported for the Replay API.", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "502", description = "Bad Gateway", content = {@Content(schema = @Schema(implementation = AppError.class))}),
             @ApiResponse(responseCode = "503", description = "Service Unavailable", content = {@Content(schema = @Schema(implementation = AppError.class))})
     })
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("@authorizationFilter.hasRole('" + Role.USER_OPS + "')")
-    public ResponseEntity<ReplayResponse> triggerReplay(@Parameter(description = "x-collaboration") @RequestHeader(name = "x-collaboration", required = false)
-                                                        @jakarta.validation.Valid @ValidateCollaborationContext String collaborationDirectives,
-                                                        @Valid @RequestBody ReplayRequest replayRequest) {
+    public ResponseEntity<ReplayResponse> triggerReplay(
+            // Not advertised in OpenAPI: collaboration is unsupported on Replay (runtime 501).
+            // Hiding avoids contract fuzzers sending x-collaboration and treating 501 as a server error.
+            @Parameter(hidden = true)
+            @RequestHeader(name = "x-collaboration", required = false)
+            @Valid
+            @ValidateCollaborationContext
+            String collaborationDirectives,
+            @Valid @RequestBody ReplayRequest replayRequest) {
 
-        Optional<CollaborationContext> collaborationContext = collaborationContextFactory.create(collaborationDirectives);
+        Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
         if (collaborationContext.isPresent())
             throw new AppException(
                     org.apache.http.HttpStatus.SC_NOT_IMPLEMENTED,

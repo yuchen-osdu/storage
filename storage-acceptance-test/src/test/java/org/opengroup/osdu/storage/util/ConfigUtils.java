@@ -62,6 +62,8 @@ public class ConfigUtils {
 
     public long getTimeoutForReplay() { return  getLongProperty("test.replayAll.timeout", "60");}
 
+    public long getLegalComplianceWaitSeconds() { return getLongProperty("test.legalCompliance.wait", "100");}
+
     private static String getEnvValue(String propertyName) {
         return EnvLoader.get(propertyName.toUpperCase().replaceAll("\\.", "_"));
     }

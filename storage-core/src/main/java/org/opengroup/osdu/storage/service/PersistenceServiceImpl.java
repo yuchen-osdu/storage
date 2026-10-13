@@ -62,8 +62,6 @@ public class PersistenceServiceImpl implements PersistenceService {
     @Autowired
     private JaxRsDpsLog logger;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
-
     @Override
     public void persistRecordBatch(TransferBatch transfer, Optional<CollaborationContext> collaborationContext) {
 
