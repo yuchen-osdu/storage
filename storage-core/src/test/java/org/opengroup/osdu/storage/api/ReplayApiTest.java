@@ -1,9 +1,19 @@
 package org.opengroup.osdu.storage.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.MockitoAnnotations.initMocks;
 
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -13,16 +23,6 @@ import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
 import org.opengroup.osdu.core.common.model.tenant.TenantInfo;
 import org.opengroup.osdu.storage.request.ReplayRequest;
-import org.opengroup.osdu.storage.response.ReplayResponse;
-import org.springframework.http.ResponseEntity;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.MockitoAnnotations.initMocks;
 
 @ExtendWith(MockitoExtension.class)
 public class ReplayApiTest {
@@ -51,19 +51,37 @@ public class ReplayApiTest {
         tenant.setName(this.TENANT);
     }
 
-    @Test
-    public void should_returnsHttp501_when_creatingReplayRequestWithCollaborationHeader() {
+    static Stream<String> collaborationHeadersThatShouldReach501() {
+        String uuid = "9e1c4e74-3b9b-4b17-a0d5-67766558ec65";
+        return Stream.of(
+            "id=" + uuid + ",application=TestApp",
+            "application=TestApp,id=" + uuid,
+            "id=" + uuid + ", application=TestApp",
+            "ID=" + uuid + ",Application=TestApp",
+            "id=" + uuid + ",application=TestApp,OtherFutureDirective=x");
+    }
+
+    @ParameterizedTest
+    @MethodSource("collaborationHeadersThatShouldReach501")
+    public void should_returnsHttp501_when_creatingReplayRequestWithFlexibleCollaborationHeader(
+        String collaborationDirectives) {
 
         ReplayRequest replayRequest = new ReplayRequest();
         replayRequest.setOperation("replay");
-        lenient().when(this.collaborationContextFactory.create(eq(COLLABORATION_DIRECTIVES))).thenReturn(COLLABORATION_CONTEXT);
-        try {
-            ResponseEntity<ReplayResponse> response = this.sut.triggerReplay(COLLABORATION_DIRECTIVES, replayRequest);
-        } catch (AppException e) {
-            assertEquals(501, e.getError().getCode());
-            assertEquals("Collaboration feature not implemented for Replay API.", e.getError().getReason());
-            assertEquals("Collaboration feature is not yet supported for the Replay API.", e.getError().getMessage());
-        }
+        lenient().when(this.collaborationContextFactory.create(eq(collaborationDirectives)))
+            .thenReturn(COLLABORATION_CONTEXT);
+
+        AppException e = assertThrows(AppException.class,
+            () -> this.sut.triggerReplay(collaborationDirectives, replayRequest));
+        assertEquals(501, e.getError().getCode());
+        assertEquals("Collaboration feature not implemented for Replay API.", e.getError().getReason());
+        assertEquals("Collaboration feature is not yet supported for the Replay API.", e.getError().getMessage());
+    }
+
+    @Test
+    public void should_returnsHttp501_when_creatingReplayRequestWithCollaborationHeader() {
+        should_returnsHttp501_when_creatingReplayRequestWithFlexibleCollaborationHeader(
+            COLLABORATION_DIRECTIVES);
     }
 
 }
