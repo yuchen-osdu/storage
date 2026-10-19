@@ -30,9 +30,8 @@ public class CollaborationFilterTest {
 
     @Test
     public void shouldPassRequestToChain() throws IOException, ServletException {
-        // After removing the collaborations-enabled feature flag,
-        // the CollaborationFilter now simply passes all requests to the filter chain
-        // without any validation or rejection based on feature flag state.
+        // The CollaborationFilter now simply passes all requests to the filter chain
+        // without any validation or rejection based on a collaboration toggle.
         collaborationFilter.doFilter(httpServletRequest, httpServletResponse, filterChain);
 
         verify(filterChain).doFilter(httpServletRequest, httpServletResponse);

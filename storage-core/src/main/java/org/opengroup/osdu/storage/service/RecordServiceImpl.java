@@ -22,7 +22,6 @@ import com.google.common.collect.Lists;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
@@ -100,8 +99,6 @@ public class RecordServiceImpl implements RecordService {
 
     @Autowired
     private RecordUtil recordUtil;
-    @Autowired
-    private IFeatureFlag collaborationFeatureFlag;
     @Autowired
     private IngestionService ingestionService;
     @Autowired

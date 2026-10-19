@@ -91,7 +91,7 @@ Integration accounts must have the roles listed in `src/test/resources/required-
 - **HTTP client:** `org.opengroup.osdu.core.test.client.StorageClient` — non-2xx responses throw `ClientException`.
 - **Cleanup:** `StorageClient` tracks records created on successful `putRecords` and deletes them in `teardown()` (via `TidyTestClient`). `LegalTagsClient` cleans up legal tags the same way. Per-class test groups are removed in `@AfterAll` via `entitlementsClient.teardown()`.
 - **Legal tags:** Created with full `LegalTag` payloads (including `dataType` `Public Domain Data`) through `createLegalTag()`.
-- **`/info`:** `GetQueryInfoIntegrationTest` extends `BaseGetInfoAcceptanceTests` and expects feature flags `collaborations-enabled` and `featureFlag.opa.enabled` when exposure is enabled.
+- **`/info`:** `GetQueryInfoIntegrationTest` extends `BaseGetInfoAcceptanceTests` and expects `featureFlag.opa.enabled` when feature flag exposure is enabled.
 
 ### Run tests
 

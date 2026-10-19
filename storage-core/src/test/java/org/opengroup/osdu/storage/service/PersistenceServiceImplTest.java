@@ -24,7 +24,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.logging.JaxRsDpsLog;
 import org.opengroup.osdu.core.common.model.entitlements.Acl;
 import org.opengroup.osdu.core.common.model.http.AppException;
@@ -77,8 +76,6 @@ public class PersistenceServiceImplTest {
     @Mock
     private JaxRsDpsLog logger;
 
-    @Mock
-    private IFeatureFlag collaborationFeatureFlag;
 
     @InjectMocks
     private PersistenceServiceImpl sut;
