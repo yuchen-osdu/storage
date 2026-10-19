@@ -28,7 +28,6 @@ public abstract class CollaborationUpdateRecordsMetadataTest extends TestBase {
 
     @Override
     public void setup() throws Exception {
-        isCollaborationEnabled = true;
         LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
         LegalTagUtils.create(LEGAL_TAG_NAME, testUtils.getToken());
 
