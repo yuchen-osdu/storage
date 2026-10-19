@@ -17,7 +17,6 @@ import static org.opengroup.osdu.storage.util.TestUtils.assertRecordVersionAndRe
 import static org.opengroup.osdu.storage.util.TestUtils.createRecordInCollaborationContext_AndReturnVersion;
 
 public abstract class CollaborationUpdateRecordsMetadataTest extends TestBase {
-    private static boolean isCollaborationEnabled = false;
     private static final String APPLICATION_NAME = "storage service integration test for update records metadata";
     private static final String TENANT_NAME = TenantUtils.getTenantName();
     private static final long CURRENT_TIME_MILLIS = System.currentTimeMillis();
@@ -29,9 +28,6 @@ public abstract class CollaborationUpdateRecordsMetadataTest extends TestBase {
 
     @Override
     public void setup() throws Exception {
-        if (configUtils != null && !configUtils.getIsCollaborationEnabled()) {
-            return;
-        }
         isCollaborationEnabled = true;
         LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
         LegalTagUtils.create(LEGAL_TAG_NAME, testUtils.getToken());
@@ -48,7 +44,6 @@ public abstract class CollaborationUpdateRecordsMetadataTest extends TestBase {
 
     @Test
     public void shouldMaintainAndUpdateRecordInRespctiveCollaborationContext() throws Exception {
-        if (!isCollaborationEnabled) return;
         //assert record with no collaboration context
         CloseableHttpResponse getResponse = TestUtils.send("records/" + RECORD_PATCH_ID, "GET", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
         String responseBody = assertRecordVersionAndReturnResponseBody(getResponse, RECORD_PATCH_V1);
@@ -64,7 +59,6 @@ public abstract class CollaborationUpdateRecordsMetadataTest extends TestBase {
 
     @After
     public void tearDown() throws Exception {
-        if (!isCollaborationEnabled) return;
         TestUtils.send("records/" + RECORD_PATCH_ID, "DELETE", getHeadersWithxCollaboration(null, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
         TestUtils.send("records/" + RECORD_PATCH_ID, "DELETE", getHeadersWithxCollaboration(COLLABORATION1_ID, APPLICATION_NAME, TENANT_NAME, testUtils.getToken()), "", "");
         LegalTagUtils.delete(LEGAL_TAG_NAME, testUtils.getToken());

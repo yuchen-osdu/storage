@@ -34,9 +34,6 @@ public abstract class CollaborationRecordsPurgeTest extends TestBase {
 
     @Override
     public void setup() throws Exception {
-        if (configUtils != null && !configUtils.getIsCollaborationEnabled()) {
-            return;
-        }
         isCollaborationEnabled = true;
         LEGAL_TAG_NAME_A = LegalTagUtils.createRandomName();
         LegalTagUtils.create(LEGAL_TAG_NAME_A, testUtils.getToken());

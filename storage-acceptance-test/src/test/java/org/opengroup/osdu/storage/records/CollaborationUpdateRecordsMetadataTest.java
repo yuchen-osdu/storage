@@ -38,7 +38,6 @@ public final class CollaborationUpdateRecordsMetadataTest extends BaseRecordsAcc
   private static final String APPLICATION_NAME =
       "storage service integration test for update records metadata";
 
-  private boolean isCollaborationEnabled;
   private String recordPatchId;
   private String collaboration1Id;
   private Long recordPatchV1;
@@ -48,11 +47,6 @@ public final class CollaborationUpdateRecordsMetadataTest extends BaseRecordsAcc
   @Override
   public void setup() throws Exception {
     super.setup();
-    if (!configUtils.getIsCollaborationEnabled()) {
-      isCollaborationEnabled = false;
-      return;
-    }
-    isCollaborationEnabled = true;
     long now = System.currentTimeMillis();
     collaboration1Id = CollaborationRecordsPurgeTest.COLLABORATION1_ID;
     String legalTagName = createLegalTagName("");
@@ -74,9 +68,6 @@ public final class CollaborationUpdateRecordsMetadataTest extends BaseRecordsAcc
 
   @Test
   public void shouldMaintainAndUpdateRecordInRespectiveCollaborationContext() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var getResponse = storageClient.getRecord(recordPatchId, collaborationHeaders(null, APPLICATION_NAME));
     StorageRecord record = assertRecordVersion(getResponse, recordPatchV1);
     assertNull(record.tags());
@@ -90,9 +81,6 @@ public final class CollaborationUpdateRecordsMetadataTest extends BaseRecordsAcc
 
   @AfterEach
   void cleanupCollaborationRecords() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     storageClient.deleteRecord(recordPatchId, collaborationHeaders(null, APPLICATION_NAME));
     storageClient.deleteRecord(recordPatchId, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
   }
