@@ -31,7 +31,6 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.opengroup.osdu.core.common.entitlements.IEntitlementsAndCacheService;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.model.entitlements.Acl;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.http.CollaborationContext;
@@ -53,7 +52,6 @@ import org.opengroup.osdu.storage.model.RecordChangedV2Delete;
 import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
 import org.opengroup.osdu.storage.provider.interfaces.IMessageBus;
 import org.opengroup.osdu.storage.provider.interfaces.IRecordsMetadataRepository;
-import org.opengroup.osdu.storage.util.RecordConstants;
 import org.opengroup.osdu.storage.util.api.RecordUtil;
 import org.opengroup.osdu.storage.validation.RequestValidationException;
 import org.opengroup.osdu.storage.validation.api.JsonMergePatchValidator;
@@ -149,8 +147,6 @@ public class RecordServiceImplTest {
     @Mock
     private DataAuthorizationService dataAuthorizationService;
 
-    @Mock
-    private IFeatureFlag collaborationFeatureFlag;
     @Mock
     private QueryService queryService;
     @Mock
@@ -325,9 +321,7 @@ public class RecordServiceImplTest {
     public void shouldPurgeRecordVersions_byLimit_successfully() {
         List<String> versions = asList("1", "2", "3", "4");
         RecordMetadata recordMetadata = createRecordMetadata(versions);
-        Boolean isCollaborationFFEnabled = true;
 
-        when(this.collaborationFeatureFlag.isFeatureEnabled(any())).thenReturn(isCollaborationFFEnabled);
         when(this.recordRepository.get(RECORD_ID, EMPTY_COLLABORATION_CONTEXT)).thenReturn(recordMetadata);
         when(this.dataAuthorizationService.validateOwnerAccess(any(), any())).thenReturn(true);
 
@@ -343,16 +337,14 @@ public class RecordServiceImplTest {
         verify(this.recordRepository).createOrUpdate(recordMetadataList, EMPTY_COLLABORATION_CONTEXT);
         verify(this.cloudStorage).deleteVersions(versionPathsToDelete);
         verify(this.auditLogger).purgeRecordVersionsSuccess(RECORD_ID, versionPathsToDelete);
-        verifyPubSubPublishedWithVersion(Optional.empty(), isCollaborationFFEnabled, versions);
+        verifyPubSubPublishedWithVersion(Optional.empty(), versions);
     }
 
     @Test
     public void shouldPurgeRecordVersions_byLimit_successfully_with_context() {
         List<String> versions = asList("1", "2", "3", "4");
         RecordMetadata recordMetadata = createRecordMetadata(versions);
-        Boolean isCollaborationFFEnabled = false;
 
-        when(this.collaborationFeatureFlag.isFeatureEnabled(any())).thenReturn(isCollaborationFFEnabled);
         when(this.recordRepository.get(RECORD_ID, COLLABORATION_CONTEXT)).thenReturn(recordMetadata);
         when(this.dataAuthorizationService.validateOwnerAccess(any(), any())).thenReturn(true);
 
@@ -368,7 +360,7 @@ public class RecordServiceImplTest {
         verify(this.recordRepository).createOrUpdate(recordMetadataList, COLLABORATION_CONTEXT);
         verify(this.cloudStorage).deleteVersions(versionPathsToDelete);
         verify(this.auditLogger).purgeRecordVersionsSuccess(RECORD_ID, versionPathsToDelete);
-        verifyPubSubPublishedWithVersion(COLLABORATION_CONTEXT, isCollaborationFFEnabled, versions);
+        verifyPubSubPublishedWithVersion(COLLABORATION_CONTEXT, versions);
     }
 
     @Test
@@ -896,13 +888,12 @@ public class RecordServiceImplTest {
     }
 
     @Test
-    public void shouldDeleteRecords_successfully_when_collaborationFFIsDisabled() {
+    public void shouldDeleteRecordsSuccessfully_whenCollaborationContextIsAbsent() {
         RecordMetadata record = buildRecordMetadata();
         Map<String, RecordMetadata> expectedRecordMetadataMap = new HashMap<String, RecordMetadata>() {{
             put(RECORD_ID, record);
         }};
 
-        when(collaborationFeatureFlag.isFeatureEnabled(RecordConstants.COLLABORATIONS_FEATURE_NAME)).thenReturn(false);
         when(recordRepository.get(singletonList(RECORD_ID), Optional.empty())).thenReturn(expectedRecordMetadataMap);
         when(dataAuthorizationService.validateOwnerAccess(record, OperationType.delete)).thenReturn(true);
 
@@ -912,7 +903,7 @@ public class RecordServiceImplTest {
         verify(dataAuthorizationService, only()).validateOwnerAccess(record, OperationType.delete);
         verify(recordRepository, times(1)).createOrUpdate(singletonList(record), Optional.empty());
         verify(auditLogger, only()).deleteRecordSuccess(singletonList(RECORD_ID));
-        verifyPubSubPublished(Optional.empty(), false);
+        verifyPubSubPublished(Optional.empty());
 
         assertEquals(RecordState.deleted, record.getStatus());
         assertEquals(USER_NAME, record.getModifyUser());
@@ -920,13 +911,12 @@ public class RecordServiceImplTest {
     }
 
     @Test
-    public void shouldBulkDeleteRecords_successfully_when_collaborationFFIsEnabledAndContextIsPresent() {
+    public void shouldBulkDeleteRecordsSuccessfully_whenCollaborationContextIsPresent() {
         RecordMetadata record = buildRecordMetadata();
         Map<String, RecordMetadata> expectedRecordMetadataMap = new HashMap<String, RecordMetadata>() {{
             put(COLLABORATION_CONTEXT.get().getId() + RECORD_ID, record);
         }};
 
-        when(collaborationFeatureFlag.isFeatureEnabled(RecordConstants.COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
         when(recordRepository.get(singletonList(RECORD_ID), COLLABORATION_CONTEXT)).thenReturn(expectedRecordMetadataMap);
         when(dataAuthorizationService.validateOwnerAccess(record, OperationType.delete)).thenReturn(true);
 
@@ -936,7 +926,7 @@ public class RecordServiceImplTest {
         verify(dataAuthorizationService, only()).validateOwnerAccess(record, OperationType.delete);
         verify(recordRepository, times(1)).createOrUpdate(singletonList(record), COLLABORATION_CONTEXT);
         verify(auditLogger, only()).deleteRecordSuccess(singletonList(RECORD_ID));
-        verifyPubSubPublished(COLLABORATION_CONTEXT, true);
+        verifyPubSubPublished(COLLABORATION_CONTEXT);
 
         assertEquals(RecordState.deleted, record.getStatus());
         assertEquals(USER_NAME, record.getModifyUser());
@@ -945,13 +935,12 @@ public class RecordServiceImplTest {
     }
 
     @Test
-    public void shouldBulkDeleteRecords_successfully_when_collaborationFFIsEnabledAndContextIsNotPresent() {
+    public void shouldBulkDeleteRecordsSuccessfully_whenCollaborationContextIsAbsent() {
         RecordMetadata record = buildRecordMetadata();
         Map<String, RecordMetadata> expectedRecordMetadataMap = new HashMap<String, RecordMetadata>() {{
             put(RECORD_ID, record);
         }};
 
-        when(collaborationFeatureFlag.isFeatureEnabled(RecordConstants.COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
         when(recordRepository.get(singletonList(RECORD_ID), Optional.empty())).thenReturn(expectedRecordMetadataMap);
         when(dataAuthorizationService.validateOwnerAccess(record, OperationType.delete)).thenReturn(true);
 
@@ -961,7 +950,7 @@ public class RecordServiceImplTest {
         verify(dataAuthorizationService, only()).validateOwnerAccess(record, OperationType.delete);
         verify(recordRepository, times(1)).createOrUpdate(singletonList(record), Optional.empty());
         verify(auditLogger, only()).deleteRecordSuccess(singletonList(RECORD_ID));
-        verifyPubSubPublished(Optional.empty(), true);
+        verifyPubSubPublished(Optional.empty());
 
         assertEquals(RecordState.deleted, record.getStatus());
         assertEquals(USER_NAME, record.getModifyUser());
@@ -971,14 +960,13 @@ public class RecordServiceImplTest {
     @Test
     public void shouldSoftDeleteRecords_successfully_inCollaborationContext() {
         RecordMetadata record = buildRecordMetadata();
-        when(collaborationFeatureFlag.isFeatureEnabled(RecordConstants.COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
         when(recordRepository.get(RECORD_ID, COLLABORATION_CONTEXT)).thenReturn(record);
         when(dataAuthorizationService.validateOwnerAccess(record, OperationType.delete)).thenReturn(true);
         sut.deleteRecord(RECORD_ID, USER_NAME, COLLABORATION_CONTEXT);
         verify(recordRepository, times(1)).get(RECORD_ID, COLLABORATION_CONTEXT);
         verify(dataAuthorizationService, only()).validateOwnerAccess(record, OperationType.delete);
         verify(auditLogger, only()).deleteRecordSuccess(singletonList(RECORD_ID));
-        verifyPubSubPublished(COLLABORATION_CONTEXT, true);
+        verifyPubSubPublished(COLLABORATION_CONTEXT);
         assertEquals(RecordState.deleted, record.getStatus());
         assertEquals(USER_NAME, record.getModifyUser());
 
@@ -1040,7 +1028,7 @@ public class RecordServiceImplTest {
             verify(recordRepository, times(1)).createOrUpdate(singletonList(record), Optional.empty());
             verify(auditLogger, times(1)).deleteRecordSuccess(singletonList(RECORD_ID));
             verify(auditLogger, times(1)).deleteRecordFail(singletonList(expectedErrorMessage));
-            verifyPubSubPublished(Optional.empty(), false);
+            verifyPubSubPublished(Optional.empty());
 
             assertEquals(RecordState.deleted, record.getStatus());
             assertEquals(USER_NAME, record.getModifyUser());
@@ -1075,11 +1063,11 @@ public class RecordServiceImplTest {
         }
     }
 
-    private void verifyPubSubPublished(Optional<CollaborationContext> collaborationContext, boolean isCollaborationFFEnabled) {
+    private void verifyPubSubPublished(Optional<CollaborationContext> collaborationContext) {
         ArgumentCaptor<PubSubDeleteInfo> pubsubMessageCaptor = ArgumentCaptor.forClass(PubSubDeleteInfo.class);
         ArgumentCaptor<RecordChangedV2Delete> recordChangedV2DeleteArgumentCaptor = ArgumentCaptor.forClass(RecordChangedV2Delete.class);
 
-        if (isCollaborationFFEnabled) {
+        if (collaborationContext.isPresent()) {
             verify(this.pubSubClient).publishMessage(eq(collaborationContext), eq(this.headers), recordChangedV2DeleteArgumentCaptor.capture());
             RecordChangedV2Delete capturedMessage = recordChangedV2DeleteArgumentCaptor.getValue();
             assertEquals(RECORD_ID, capturedMessage.getId());
@@ -1087,23 +1075,23 @@ public class RecordServiceImplTest {
             assertEquals(OperationType.delete, capturedMessage.getOp());
             assertEquals(DeletionType.soft, capturedMessage.getDeletionType());
             assertEquals(USER_NAME, capturedMessage.getModifiedBy());
-        } 
-
-        if (!collaborationContext.isPresent()) {
+            verify(this.pubSubClient, never()).publishMessage(eq(this.headers), any(PubSubDeleteInfo.class));
+        } else {
             verify(this.pubSubClient).publishMessage(eq(this.headers), pubsubMessageCaptor.capture());
             PubSubDeleteInfo capturedMessage = pubsubMessageCaptor.getValue();
             assertEquals(RECORD_ID, capturedMessage.getId());
             assertEquals(KIND, capturedMessage.getKind());
             assertEquals(OperationType.delete, capturedMessage.getOp());
             assertEquals(DeletionType.soft, capturedMessage.getDeletionType());
+            verify(this.pubSubClient, never()).publishMessage(eq(collaborationContext), eq(this.headers), any(RecordChangedV2Delete.class));
         }
     }
 
-    private void verifyPubSubPublishedWithVersion(Optional<CollaborationContext> collaborationContext, boolean isCollaborationFFEnabled, List<String> versions) {
+    private void verifyPubSubPublishedWithVersion(Optional<CollaborationContext> collaborationContext, List<String> versions) {
         ArgumentCaptor<PubSubDeleteInfo> pubsubMessageCaptor = ArgumentCaptor.forClass(PubSubDeleteInfo.class);
         ArgumentCaptor<RecordChangedV2Delete> recordChangedV2DeleteArgumentCaptor = ArgumentCaptor.forClass(RecordChangedV2Delete.class);
 
-        if (isCollaborationFFEnabled) {
+        if (collaborationContext.isPresent()) {
             verify(this.pubSubClient, times(LIMIT)).publishMessage(eq(collaborationContext), eq(this.headers), recordChangedV2DeleteArgumentCaptor.capture());
             RecordChangedV2Delete capturedMessage = recordChangedV2DeleteArgumentCaptor.getValue();
             assertEquals(RECORD_ID, capturedMessage.getId());
@@ -1112,22 +1100,17 @@ public class RecordServiceImplTest {
             assertEquals(DeletionType.hard, capturedMessage.getDeletionType());
             assertEquals(USER_NAME, capturedMessage.getModifiedBy());
             assertEquals(Long.parseLong(versions.get(LIMIT-1)), capturedMessage.getVersion());
-        } 
-        else {
-            verify(this.pubSubClient, times(0)).publishMessage(eq(collaborationContext), eq(this.headers), recordChangedV2DeleteArgumentCaptor.capture());
-        }
-
-        if (!collaborationContext.isPresent()) {
+            verify(this.pubSubClient, never()).publishMessage(eq(this.headers), any(PubSubDeleteInfo.class));
+        } else {
             verify(this.pubSubClient, times(LIMIT)).publishMessage(eq(this.headers), pubsubMessageCaptor.capture());
             PubSubDeleteInfo capturedMessage = pubsubMessageCaptor.getValue();
             assertEquals(RECORD_ID + "/" + versions.get(LIMIT-1), capturedMessage.getId());
             assertEquals(KIND, capturedMessage.getKind());
             assertEquals(OperationType.delete, capturedMessage.getOp());
             assertEquals(DeletionType.hard, capturedMessage.getDeletionType());
+            verify(this.pubSubClient, never()).publishMessage(eq(collaborationContext), eq(this.headers), any(RecordChangedV2Delete.class));
         }
-        else {
-            verify(this.pubSubClient, times(0)).publishMessage(eq(this.headers), pubsubMessageCaptor.capture());
-        }
+
     }
 
     private RecordMetadata buildRecordMetadata() {

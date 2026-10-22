@@ -30,6 +30,8 @@ import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 @UtilityClass
 public class CollaborationContextHelper {
 
+  public static final String X_COLLABORATION_HEADER_NAME = "x-collaboration";
+
   public Optional<CollaborationContext> create(
       CollaborationContextFactory factory, String collaborationDirectives) {
     try {

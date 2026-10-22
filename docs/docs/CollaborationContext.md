@@ -16,20 +16,14 @@ This feature allows teams to:
 
 - **Collaboration Context**: A namespace that isolates records from the Source of Record (SOR) namespace
 - **x-collaboration Header**: HTTP header that specifies the collaboration context for API requests
-- **Feature Flag**: Controls whether collaboration functionality is enabled (default: `false`)
 - **Message Topics**: Separate messaging topics for collaboration and non-collaboration messages
 
-### Feature Flag Behavior
+### Collaboration behavior
 
-The collaboration feature is controlled by a `COLLABORATIONS_ENABLED` feature flag that defaults to `false`.
+The collaboration feature is available without a dedicated feature flag.
 
-- **Feature Flag = `true`**:
-   - Requests with `x-collaboration` header > messages sent to `recordstopic-v2` only
-   - Requests without `x-collaboration` header > messages sent to `recordstopic-v2` only (single queue approach)
-
-- **Feature Flag = `false`**:
-   - Requests with `x-collaboration` header > rejected with Not implemented exception
-   - Requests without `x-collaboration` header > messages sent to `recordstopic` only (normal behavior)
+- Requests with `x-collaboration` header are handled in collaboration context
+- Requests without `x-collaboration` header continue to use the default non-collaboration behavior
 
 ### Collaboration Header format
 
@@ -65,7 +59,7 @@ collaborationFilter.excludedPaths=info,health,liveness_check,swagger,swagger-ui/
 
 - **recordstopic (V1)**: Existing topic for non-collaboration messages, SOR namespace only, for backward compatibility
 
-- **recordstopic-v2 (V2)**: New topic for collaboration messages, includes `x-collaboration` attribute when applicable,
+ - **recordstopic-v2 (V2)**: New topic for collaboration messages, includes `x-collaboration` attribute when applicable,
 Collaboration + SOR messages
 
 ### Indexer-Queue (if applicable)
@@ -100,8 +94,6 @@ Records in collaboration contexts are isolated through:
 # Feature flag strategy. appProperty - get value from environment variable, dataPartition - get value from Partition service
 featureFlag.strategy=appProperty
 
-# Collaboration feature flag (default: false)
-collaborations-enabled=${COLLABORATIONS_ENABLED:false}
 
 # Topic configuration
 records-changed-topic-name=${RECORDS_CHANGED_TOPIC_NAME:records-changed}
@@ -117,10 +109,7 @@ records-changed-v2-topic-name=${RECORDS_CHANGED_V2_TOPIC_NAME:records-changed-v2
 
 All APIs in storage service can be collaboration context-aware. Please refer to the 
 [Collaboration Integration](CollaborationIntegration.md) tutorial for further implementation details. 
-This functionality is behind a collaboration feature flag which is set to false by default. 
-The functionality of the existing storage service will not be changed with this feature flag set to false.
-When it is set to true the old functionality is still not changed however you can work with Records 
-in new contexts using the x-collaboration header when it is optionally provided.
+The `x-collaboration` header is supported without a dedicated collaboration feature flag.
 
 In order to use storage apis in a collaboration context, the API user needs to add 
 a __x-collaboration HTTP header__ to the requests.
@@ -134,19 +123,11 @@ Consumers who want to integrate with record change messages that include changes
 collaboration context need to register the records to the new topic "recordstopic-v2". 
 Refer the [DataNotification.md](https://community.opengroup.org/osdu/platform/system/notification/-/blob/master/docs/tutorial/DataNotification.md) file for details about the recordstopics-v2.
 
-This topic exists in addition to the current record changed topic and receives both collaboration 
-and non collaboration messages when the collaborations feature flag is enabled.
+This topic exists in addition to the current record changed topic and receives collaboration-aware messages.
 
-The current record changed topic however does not receive messages when collaboration context is provided. 
-Meaning, the original functionality of storage should not be changed if collaboration context is not provided.
-
-In summary,
-1. If feature flag is set to true:
-   1. A request with x-collaboration header: should send a message to recordstopic-v2
-   2. A request without x-collaboration header: should send a message to recordstopic-v2 only (single queue approach)
-2. If feature flag is set to false:
-   1. A request with x-collaboration header: should not send a message to any topic
-   2. A request without x-collaboration header: should send a message to recordstopic
+In summary:
+1. A request with `x-collaboration` header sends a message to `recordstopic-v2`.
+2. A request without `x-collaboration` header continues to send a message to `recordstopic`.
 
 The message contains the collaboration context header as an atribute when a change is made in context of a collaboration.
 
@@ -240,7 +221,7 @@ curl --request PUT \
 </details>
 
 ### Excluded Paths
-CollaborationFilter, when enabled with data partition _feature flag strategy_, makes a call to Partition service. This call requires `data-partition-id` header, which is not passed/required for certain apis (_info, swagger, health, etc_)
+`CollaborationFilter`, when used with the data partition strategy, makes a call to Partition service. This call requires `data-partition-id` header, which is not passed/required for certain apis (_info, swagger, health, etc_)
 We can short-circuit the CollaborationFilter class when url contains one of these paths.
 
 Property used (CSP Specific)

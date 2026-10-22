@@ -22,7 +22,6 @@ import com.google.common.collect.Lists;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
@@ -65,7 +64,6 @@ import java.util.stream.IntStream;
 
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_FROM_VERSION;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_FROM_VERSION_FOR_NON_EXISTING_VERSIONS;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_LIMIT_FOR_FROM_VERSION;
@@ -101,8 +99,6 @@ public class RecordServiceImpl implements RecordService {
 
     @Autowired
     private RecordUtil recordUtil;
-    @Autowired
-    private IFeatureFlag collaborationFeatureFlag;
     @Autowired
     private IngestionService ingestionService;
     @Autowired
@@ -142,10 +138,9 @@ public class RecordServiceImpl implements RecordService {
         }
 
         this.auditLogger.purgeRecordSuccess(singletonList(recordId));
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, getRecordChangedV2Delete(recordId, recordMetadata, DeletionType.hard));
-        }
-        if (!collaborationContext.isPresent()) {
+        } else {
             this.pubSubClient.publishMessage(this.headers, new PubSubDeleteInfo(recordId, recordMetadata.getKind(), DeletionType.hard));
         }
     }
@@ -211,10 +206,9 @@ public class RecordServiceImpl implements RecordService {
 
                 String version = versionPathParts[2];
 
-                if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+                if (collaborationContext.isPresent()) {
                     this.pubSubClient.publishMessage(collaborationContext, this.headers, getRecordChangedV2Delete(recordId, recordMetadata, DeletionType.hard, Long.parseLong(version)));
-                }
-                if (!collaborationContext.isPresent()) {
+                } else {
                     this.pubSubClient.publishMessage(this.headers, new PubSubDeleteInfo(recordId + "/" + version, recordMetadata.getKind(), DeletionType.hard));
                 }
             } 
@@ -242,11 +236,10 @@ public class RecordServiceImpl implements RecordService {
         this.recordRepository.createOrUpdate(recordsMetadata, collaborationContext);
         this.auditLogger.deleteRecordSuccess(singletonList(recordId));
 
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             RecordChangedV2Delete recordChangedV2Delete = getRecordChangedV2Delete(recordId, recordMetadata, DeletionType.soft);
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2Delete);
-        }
-        if (!collaborationContext.isPresent()) {
+        } else {
             PubSubDeleteInfo pubSubDeleteInfo = new PubSubDeleteInfo(recordId, recordMetadata.getKind(), DeletionType.soft);
             this.pubSubClient.publishMessage(this.headers, pubSubDeleteInfo);
         }
@@ -303,13 +296,12 @@ public class RecordServiceImpl implements RecordService {
 
     private void publishDeletedRecords(Optional<CollaborationContext> collaborationContext, List<RecordMetadata> records) {
 
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             List<RecordChangedV2Delete> messages = records.stream()
                     .map(recordMetadata -> getRecordChangedV2Delete(recordMetadata.getId(), recordMetadata, DeletionType.soft))
                     .collect(Collectors.toList());
             pubSubClient.publishMessage(collaborationContext, headers, messages.toArray(new RecordChangedV2Delete[messages.size()]));
-        }
-        if (!collaborationContext.isPresent()) {
+        } else {
             List<PubSubDeleteInfo> messages = records.stream()
                     .map(recordMetadata -> new PubSubDeleteInfo(recordMetadata.getId(), recordMetadata.getKind(), DeletionType.soft))
                     .collect(Collectors.toList());

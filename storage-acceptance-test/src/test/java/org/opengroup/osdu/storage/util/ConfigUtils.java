@@ -52,9 +52,6 @@ public class ConfigUtils {
     public boolean getIsSchemaEndpointsEnabled() {
         return getBooleanProperty("schema.endpoints.enabled", "true");
     }
-    public boolean getIsCollaborationEnabled() {
-        return getBooleanProperty("collaboration.enabled", "false");
-    }
 
     public boolean isTestReplayEnabled(){ return  getBooleanProperty("test.replay.enabled", "false");}
 

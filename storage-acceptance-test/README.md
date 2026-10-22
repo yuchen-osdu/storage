@@ -53,7 +53,6 @@ Each property can be overridden by an environment variable: dots (`.`) become un
 | Property (`test.properties`)          | Default | Environment override                        | Description |
 |---------------------------------------|---------|---------------------------------------------|-------------|
 | `schema.endpoints.enabled`            | `false` | `SCHEMA_ENDPOINTS_ENABLED`                  | Run schema API tests (`CreateSchemaIntegrationTest`, `StorageSchemaNegativeTest`, query-kinds tests that depend on schemas) |
-| `collaboration.enabled`               | `true`  | `COLLABORATION_ENABLED`                     | Run collaboration feature tests |
 | `test.replay.enabled`                 | `true`  | `TEST_REPLAY_ENABLED`                       | Run replay API tests |
 | `test.replayAll.enabled`              | `false` | `TEST_REPLAY_ALL_ENABLED`                   | Run long-running replay-all scenarios (not set in `test.properties`; code default) |
 | `test.replayAll.timeout`              | `60`    | `TEST_REPLAY_ALL_TIMEOUT`                   | Seconds to wait for replay-all indexing (not set in `test.properties`; code default) |
@@ -91,7 +90,7 @@ Integration accounts must have the roles listed in `src/test/resources/required-
 - **HTTP client:** `org.opengroup.osdu.core.test.client.StorageClient` — non-2xx responses throw `ClientException`.
 - **Cleanup:** `StorageClient` tracks records created on successful `putRecords` and deletes them in `teardown()` (via `TidyTestClient`). `LegalTagsClient` cleans up legal tags the same way. Per-class test groups are removed in `@AfterAll` via `entitlementsClient.teardown()`.
 - **Legal tags:** Created with full `LegalTag` payloads (including `dataType` `Public Domain Data`) through `createLegalTag()`.
-- **`/info`:** `GetQueryInfoIntegrationTest` extends `BaseGetInfoAcceptanceTests` and expects feature flags `collaborations-enabled` and `featureFlag.opa.enabled` when exposure is enabled.
+- **`/info`:** `GetQueryInfoIntegrationTest` extends `BaseGetInfoAcceptanceTests` and expects `featureFlag.opa.enabled` when feature flag exposure is enabled.
 
 ### Run tests
 

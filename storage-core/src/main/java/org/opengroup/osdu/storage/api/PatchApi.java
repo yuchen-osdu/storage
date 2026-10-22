@@ -34,7 +34,6 @@ import org.opengroup.osdu.storage.response.BulkUpdateRecordsResponse;
 import org.opengroup.osdu.storage.service.BulkUpdateRecordService;
 import org.opengroup.osdu.storage.service.PatchRecordsService;
 import org.opengroup.osdu.storage.util.CollaborationContextHelper;
-import org.opengroup.osdu.storage.util.CollaborationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -86,7 +85,7 @@ public class PatchApi {
     })
     @PatchMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-    public ResponseEntity<BulkUpdateRecordsResponse> updateRecordsMetadata(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = CollaborationFilter.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+    public ResponseEntity<BulkUpdateRecordsResponse> updateRecordsMetadata(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = CollaborationContextHelper.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
                                                                            @Parameter(description = "Records to be updated") @RequestBody @Valid RecordBulkUpdateParam recordBulkUpdateParam) {
         Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
         BulkUpdateRecordsResponse response = this.bulkUpdateRecordService.bulkUpdateRecords(recordBulkUpdateParam, this.headers.getUserEmail(), collaborationContext);
@@ -113,7 +112,7 @@ public class PatchApi {
     })
     @PatchMapping(consumes = "application/json-patch+json", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("@authorizationFilter.hasRole('" + StorageRole.CREATOR + "', '" + StorageRole.ADMIN + "')")
-    public ResponseEntity<PatchRecordsResponse> patchRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = CollaborationFilter.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
+    public ResponseEntity<PatchRecordsResponse> patchRecords(@Parameter(description = "x-collaboration", schema = @Schema(minLength = 1, pattern = X_COLLABORATION_DIRECTIVES_PATTERN)) @RequestHeader(name = CollaborationContextHelper.X_COLLABORATION_HEADER_NAME, required = false) @Valid @ValidateCollaborationContext String collaborationDirectives,
                                                              @Parameter(description = "Records to be patched") @RequestBody @Valid PatchRecordsRequestModel patchRecordsRequest) {
         Optional<CollaborationContext> collaborationContext = CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
         PatchRecordsResponse response = this.patchRecordsService.patchRecords(patchRecordsRequest.getQuery().getIds(), patchRecordsRequest.getOps(), this.headers.getUserEmail(), collaborationContext);
