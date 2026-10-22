@@ -388,6 +388,25 @@ public class RecordServiceImplTest {
     }
 
     @Test
+    public void shouldPurgeRecordVersions_byVersionIds_withDifferentLengthVersions_successfully() {
+        List<String> versions = asList("100", "1100", "2000");
+        RecordMetadata recordMetadata = createRecordMetadata(versions);
+
+        String versionIds = "100";
+        when(this.recordRepository.get(RECORD_ID, EMPTY_COLLABORATION_CONTEXT)).thenReturn(recordMetadata);
+        when(this.dataAuthorizationService.validateOwnerAccess(any(), any())).thenReturn(true);
+
+        this.sut.purgeRecordVersions(RECORD_ID, versionIds, LIMIT, DEFAULT_FROM_VERSION, USER_NAME, EMPTY_COLLABORATION_CONTEXT);
+
+        String versionPathPrefix = KIND + "/" + RECORD_ID + "/";
+        List<String> versionPathsToRetain = asList("1100", "2000").stream().map(version -> versionPathPrefix + version).toList();
+        List<String> versionPathsToDelete = asList("100").stream().map(version -> versionPathPrefix + version).toList();
+
+        verify(this.cloudStorage).deleteVersions(versionPathsToDelete);
+        verify(this.auditLogger).purgeRecordVersionsSuccess(RECORD_ID, versionPathsToDelete);
+    }
+
+    @Test
     public void shouldPurgeRecordVersions_byFromVersion_successfully() {
         List<String> versions = asList("1", "2", "3", "4");
         RecordMetadata recordMetadata = createRecordMetadata(versions);

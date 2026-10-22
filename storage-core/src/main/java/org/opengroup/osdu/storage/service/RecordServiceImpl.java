@@ -67,6 +67,7 @@ import static java.util.stream.Collectors.toList;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_FROM_VERSION;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_FROM_VERSION_FOR_NON_EXISTING_VERSIONS;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_LIMIT_FOR_FROM_VERSION;
+import static org.opengroup.osdu.storage.validation.impl.VersionIdsValidator.versionPathHasVersionId;
 
 @Service
 public class RecordServiceImpl implements RecordService {
@@ -397,7 +398,7 @@ public class RecordServiceImpl implements RecordService {
     private void validateFromVersion(Long fromVersion, List<String> existingRecordVersionPaths) {
 
         boolean fromVersionNotFound = existingRecordVersionPaths.stream()
-                .noneMatch(paths -> paths.endsWith(String.valueOf(fromVersion)));
+                .noneMatch(paths -> versionPathHasVersionId(paths, String.valueOf(fromVersion)));
         if (fromVersionNotFound) {
             String message = String.format(INVALID_FROM_VERSION_FOR_NON_EXISTING_VERSIONS, fromVersion);
             throw new AppException(HttpStatus.SC_BAD_REQUEST, INVALID_FROM_VERSION, message);
@@ -410,7 +411,7 @@ public class RecordServiceImpl implements RecordService {
 
         for (int i = 0; i < existingRecordVersionPaths.size(); i++) {
             String recordVersionPath = existingRecordVersionPaths.get(i);
-            boolean isVersionFound = versionIdList.stream().anyMatch(recordVersionPath::endsWith);
+            boolean isVersionFound = versionIdList.stream().anyMatch(versionId -> versionPathHasVersionId(recordVersionPath, versionId));
             if (isVersionFound)
                 recordVersionPathsToDelete.add(recordVersionPath);
             else
@@ -429,7 +430,7 @@ public class RecordServiceImpl implements RecordService {
             recordVersionPathsToRetain = existingRecordVersionPaths.subList(limit, totalVersionPaths);
         } else {
             int fromVersionIndex = IntStream.range(0, totalVersionPaths).
-                    filter(index -> existingRecordVersionPaths.get(index).endsWith(String.valueOf(fromVersion)))
+                    filter(index -> versionPathHasVersionId(existingRecordVersionPaths.get(index), String.valueOf(fromVersion)))
                     .findFirst().getAsInt();
             boolean isFromVersionSameAsLatestVersion = (fromVersionIndex == totalVersionPaths - 1);
 
