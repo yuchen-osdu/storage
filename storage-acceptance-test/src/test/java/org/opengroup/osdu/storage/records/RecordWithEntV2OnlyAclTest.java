@@ -19,6 +19,7 @@ package org.opengroup.osdu.storage.records;
 
 import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.HttpResponse;
+import org.opengroup.osdu.core.test.client.model.entitlements.CreateGroupRequest;
 import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,7 +27,6 @@ import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V
 import static org.opengroup.osdu.storage.util.TestUtils.STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION;
 
 import org.apache.hc.core5.http.HttpStatus;
-import org.opengroup.osdu.core.test.auth.UserType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.opengroup.osdu.storage.util.RecordUtil;
@@ -49,9 +49,11 @@ public final class RecordWithEntV2OnlyAclTest extends BaseRecordsAcceptanceTest 
 
     createLegalTag(LEGAL_TAG);
     try {
-      var createGroupResponse = entitlementsClient.createGroup(
-          STORAGE_TEST_GROUP_ENT_V_2, STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION,
-          UserType.PRIVILEGED_USER);
+      CreateGroupRequest createGroupRequest = new CreateGroupRequest(
+          STORAGE_TEST_GROUP_ENT_V_2,
+          STORAGE_TEST_GROUP_ENT_V_2_DESCRIPTION
+      );
+      var createGroupResponse = entitlementsClient.createGroup(createGroupRequest);
       assertEquals(HttpStatus.SC_CREATED, createGroupResponse.statusCode());
     } catch (ClientException ex) {
       assertEquals(HttpStatus.SC_CONFLICT, ex.getStatusCode());

@@ -14,12 +14,15 @@
 
 package org.opengroup.osdu.storage.records;
 
+import org.junit.jupiter.api.Assertions;
 import org.opengroup.osdu.core.common.model.http.AppError;
 import org.opengroup.osdu.core.test.auth.UserType;
 import org.opengroup.osdu.core.test.client.HttpResponse;
 import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.core.test.client.StorageClient;
 import org.opengroup.osdu.core.test.client.model.storage.CreateRecordsResponse;
+import org.opengroup.osdu.core.test.client.model.storage.MultiRecordHeadersInfo;
+import org.opengroup.osdu.core.test.client.model.storage.MultiRecordHeadersRequest;
 import org.opengroup.osdu.core.test.client.model.storage.QueryRecordsRequest;
 import org.opengroup.osdu.core.test.client.model.storage.RecordVersions;
 import org.opengroup.osdu.core.test.client.model.storage.Records;
@@ -127,6 +130,43 @@ public final class RecordAccessAuthorizationTests extends BaseRecordsAcceptanceT
     assertEquals(0, responseObject.retryRecords().length);
 
     assertNotAuthorized(() -> storageClientNoAccess.getRecord(newRecordId));
+  }
+
+  @Test
+  public void should_notReturnRecordHeaders_when_userIsNotAuthorizedToRecord() {
+    var queryResponse = storageClientNoAccess.queryRecordsHeadersPost(
+        MultiRecordHeadersRequest.of(RECORD_ID));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+
+    MultiRecordHeadersInfo responseObject = queryResponse.body();
+    Assertions.assertNotNull(responseObject);
+    assertEquals(0, responseObject.records().length);
+    assertEquals(1, responseObject.notFound().length);
+    assertEquals(RECORD_ID, responseObject.notFound()[0]);
+  }
+
+  @Test
+  public void should_notReturnRecordHeadersAndReportNotFound_when_userIsNotAuthorizedAndNonExistentAndInvalidIdsGiven() {
+    String invalidId = "invalid_id_format";
+    String nonExistingId = getTenantId() + ":no:nonexisting:" + System.currentTimeMillis();
+
+    var queryResponse = storageClientNoAccess.queryRecordsHeadersPost(
+        MultiRecordHeadersRequest.of(RECORD_ID, nonExistingId, invalidId));
+    assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());
+
+    MultiRecordHeadersInfo responseObject = queryResponse.body();
+    Assertions.assertNotNull(responseObject);
+    assertEquals(0, responseObject.records().length);
+
+    // Both the unauthorized ID and the non-existing ID should be reported as not found to protect privacy
+    assertEquals(2, responseObject.notFound().length);
+    List<String> notFoundList = java.util.Arrays.asList(responseObject.notFound());
+    Assertions.assertTrue(notFoundList.contains(RECORD_ID));
+    Assertions.assertTrue(notFoundList.contains(nonExistingId));
+
+    // The invalid ID should be reported as invalid
+    assertEquals(1, responseObject.invalidRecords().length);
+    assertEquals(invalidId, responseObject.invalidRecords()[0]);
   }
 
   private void assertNotAuthorized(Executable call) {

@@ -8,8 +8,8 @@ os-storage-azure is a [Spring Boot](https://spring.io/projects/spring-boot) serv
 
 In order to run this service locally, you will need the following:
 
-- [Maven 3.6.0+](https://maven.apache.org/download.cgi)
-- [AdoptOpenJDK17](https://adoptopenjdk.net/)
+- [Maven 3.9.16+](https://maven.apache.org/download.cgi)
+- [Java 25](https://adoptium.net/)
 - Infrastructure dependencies, deployable through the relevant [infrastructure template](https://dev.azure.com/slb-des-ext-collaboration/open-data-ecosystem/_git/infrastructure-templates?path=%2Finfra&version=GBmaster&_a=contents)
 - While not a strict dependency, example commands in this document use [bash](https://www.gnu.org/software/bash/)
 
@@ -127,9 +127,9 @@ Add VM option `-Dspring.profiles.active=local` in the Edit Configurations Sectio
 Check that maven is installed:
 ```bash
 $ mvn --version
-Apache Maven 3.6.0
+Apache Maven 3.9.16
 Maven home: /usr/share/maven
-Java version: 17.0.7
+Java version: 25.0.1
 ...
 ```
 
