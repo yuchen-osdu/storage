@@ -275,7 +275,6 @@
                       <exclude>org.opengroup.osdu:storage-core</exclude>
                       <exclude>org.opengroup.osdu:storage-core-plus</exclude>
                       <exclude>org.opengroup.osdu:storage-azure</exclude>
-                      <exclude>org.opengroup.osdu:storage-ibm</exclude>
                     </excludes>
                   </requireReleaseDeps>
                 </rules>
@@ -388,12 +387,6 @@
         <id>azure</id>
         <modules>
           <module>provider/storage-azure</module>
-        </modules>
-      </profile>
-      <profile>
-        <id>ibm</id>
-        <modules>
-          <module>provider/storage-ibm</module>
         </modules>
       </profile>
     </profiles>
