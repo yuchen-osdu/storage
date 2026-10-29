@@ -7,7 +7,6 @@ CSPs that support collaborations functionality yet are indicated below-
 | CSP   | Supports Collaboration ? |
 |:------|:-------------------------|
 | Azure | Yes                      |
-| IBM   | No                       |
 | GCP   | No                       |
 | AWS   | No                       |
 
