@@ -1,4 +1,4 @@
-// Copyright 2017-2019, Schlumberger
+// Copyright 2017-2026, Schlumberger
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,13 +17,11 @@ package org.opengroup.osdu.storage.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
@@ -31,6 +29,7 @@ import org.opengroup.osdu.core.common.model.indexer.DeletionType;
 import org.opengroup.osdu.core.common.model.indexer.OperationType;
 import org.opengroup.osdu.core.common.model.storage.PubSubDeleteInfo;
 import org.opengroup.osdu.core.common.model.storage.RecordMetadata;
+import org.opengroup.osdu.core.common.model.legal.LegalCompliance;
 import org.opengroup.osdu.core.common.model.storage.RecordState;
 import org.opengroup.osdu.core.common.model.tenant.TenantInfo;
 import org.opengroup.osdu.core.common.util.CollaborationContextUtil;
@@ -41,6 +40,7 @@ import org.opengroup.osdu.storage.model.RecordChangedV2Delete;
 import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
 import org.opengroup.osdu.storage.provider.interfaces.IMessageBus;
 import org.opengroup.osdu.storage.provider.interfaces.IRecordsMetadataRepository;
+import org.opengroup.osdu.storage.util.JsonPatchUtil;
 import org.opengroup.osdu.storage.util.api.RecordUtil;
 import org.opengroup.osdu.storage.validation.ValidationDoc;
 import org.opengroup.osdu.storage.validation.api.JsonMergePatchValidator;
@@ -64,15 +64,19 @@ import java.util.stream.IntStream;
 
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_FROM_VERSION;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_FROM_VERSION_FOR_NON_EXISTING_VERSIONS;
 import static org.opengroup.osdu.storage.validation.ValidationDoc.INVALID_LIMIT_FOR_FROM_VERSION;
+import static org.opengroup.osdu.storage.validation.impl.VersionIdsValidator.versionPathHasVersionId;
 
 @Service
 public class RecordServiceImpl implements RecordService {
 
     public static final String ACCESS_DENIED = "Access denied";
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Autowired
     private IRecordsMetadataRepository recordRepository;
 
@@ -96,10 +100,6 @@ public class RecordServiceImpl implements RecordService {
 
     @Autowired
     private RecordUtil recordUtil;
-    @Autowired
-    private IFeatureFlag collaborationFeatureFlag;
-    @Autowired
-    private ObjectMapper objectMapper;
     @Autowired
     private IngestionService ingestionService;
     @Autowired
@@ -139,10 +139,9 @@ public class RecordServiceImpl implements RecordService {
         }
 
         this.auditLogger.purgeRecordSuccess(singletonList(recordId));
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, getRecordChangedV2Delete(recordId, recordMetadata, DeletionType.hard));
-        }
-        if (!collaborationContext.isPresent()) {
+        } else {
             this.pubSubClient.publishMessage(this.headers, new PubSubDeleteInfo(recordId, recordMetadata.getKind(), DeletionType.hard));
         }
     }
@@ -208,10 +207,9 @@ public class RecordServiceImpl implements RecordService {
 
                 String version = versionPathParts[2];
 
-                if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+                if (collaborationContext.isPresent()) {
                     this.pubSubClient.publishMessage(collaborationContext, this.headers, getRecordChangedV2Delete(recordId, recordMetadata, DeletionType.hard, Long.parseLong(version)));
-                }
-                if (!collaborationContext.isPresent()) {
+                } else {
                     this.pubSubClient.publishMessage(this.headers, new PubSubDeleteInfo(recordId + "/" + version, recordMetadata.getKind(), DeletionType.hard));
                 }
             } 
@@ -239,11 +237,10 @@ public class RecordServiceImpl implements RecordService {
         this.recordRepository.createOrUpdate(recordsMetadata, collaborationContext);
         this.auditLogger.deleteRecordSuccess(singletonList(recordId));
 
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             RecordChangedV2Delete recordChangedV2Delete = getRecordChangedV2Delete(recordId, recordMetadata, DeletionType.soft);
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2Delete);
-        }
-        if (!collaborationContext.isPresent()) {
+        } else {
             PubSubDeleteInfo pubSubDeleteInfo = new PubSubDeleteInfo(recordId, recordMetadata.getKind(), DeletionType.soft);
             this.pubSubClient.publishMessage(this.headers, pubSubDeleteInfo);
         }
@@ -300,13 +297,12 @@ public class RecordServiceImpl implements RecordService {
 
     private void publishDeletedRecords(Optional<CollaborationContext> collaborationContext, List<RecordMetadata> records) {
 
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             List<RecordChangedV2Delete> messages = records.stream()
                     .map(recordMetadata -> getRecordChangedV2Delete(recordMetadata.getId(), recordMetadata, DeletionType.soft))
                     .collect(Collectors.toList());
             pubSubClient.publishMessage(collaborationContext, headers, messages.toArray(new RecordChangedV2Delete[messages.size()]));
-        }
-        if (!collaborationContext.isPresent()) {
+        } else {
             List<PubSubDeleteInfo> messages = records.stream()
                     .map(recordMetadata -> new PubSubDeleteInfo(recordMetadata.getId(), recordMetadata.getKind(), DeletionType.soft))
                     .collect(Collectors.toList());
@@ -324,7 +320,8 @@ public class RecordServiceImpl implements RecordService {
 
         RecordMetadata recordMetadata = this.recordRepository.get(recordId, collaborationContext);
         String msg = String.format("Record with id '%s' does not exist", recordId);
-        if ((recordMetadata == null || recordMetadata.getStatus() != RecordState.active) && !isPurgeRequest) {
+        if ((recordMetadata == null || (recordMetadata.getStatus() != RecordState.active
+                && recordMetadata.getStatus() != RecordState.suspended)) && !isPurgeRequest) {
             throw new AppException(HttpStatus.SC_NOT_FOUND, "Record not found", msg);
         }
         if (recordMetadata == null && isPurgeRequest) {
@@ -401,7 +398,7 @@ public class RecordServiceImpl implements RecordService {
     private void validateFromVersion(Long fromVersion, List<String> existingRecordVersionPaths) {
 
         boolean fromVersionNotFound = existingRecordVersionPaths.stream()
-                .noneMatch(paths -> paths.endsWith(String.valueOf(fromVersion)));
+                .noneMatch(paths -> versionPathHasVersionId(paths, String.valueOf(fromVersion)));
         if (fromVersionNotFound) {
             String message = String.format(INVALID_FROM_VERSION_FOR_NON_EXISTING_VERSIONS, fromVersion);
             throw new AppException(HttpStatus.SC_BAD_REQUEST, INVALID_FROM_VERSION, message);
@@ -414,7 +411,7 @@ public class RecordServiceImpl implements RecordService {
 
         for (int i = 0; i < existingRecordVersionPaths.size(); i++) {
             String recordVersionPath = existingRecordVersionPaths.get(i);
-            boolean isVersionFound = versionIdList.stream().anyMatch(recordVersionPath::endsWith);
+            boolean isVersionFound = versionIdList.stream().anyMatch(versionId -> versionPathHasVersionId(recordVersionPath, versionId));
             if (isVersionFound)
                 recordVersionPathsToDelete.add(recordVersionPath);
             else
@@ -433,7 +430,7 @@ public class RecordServiceImpl implements RecordService {
             recordVersionPathsToRetain = existingRecordVersionPaths.subList(limit, totalVersionPaths);
         } else {
             int fromVersionIndex = IntStream.range(0, totalVersionPaths).
-                    filter(index -> existingRecordVersionPaths.get(index).endsWith(String.valueOf(fromVersion)))
+                    filter(index -> versionPathHasVersionId(existingRecordVersionPaths.get(index), String.valueOf(fromVersion)))
                     .findFirst().getAsInt();
             boolean isFromVersionSameAsLatestVersion = (fromVersionIndex == totalVersionPaths - 1);
 
@@ -479,8 +476,8 @@ public class RecordServiceImpl implements RecordService {
 
         try {
             if (patchRequest.getDeleted() == null) {
-                if (recordMetadata.getStatus() == RecordState.deleted) {
-                    //Trying to update a Soft deleted record
+                if (recordMetadata.getStatus() == RecordState.deleted || recordMetadata.getStatus() == RecordState.suspended) {
+                    //Trying to update a Soft deleted or legally suspended record
                     throw new AppException(HttpStatus.SC_BAD_REQUEST, "Record is not in active state, so cannot be patched",
                             "Record is not in active state, so cannot be patched");
                 }
@@ -491,8 +488,7 @@ public class RecordServiceImpl implements RecordService {
 
                 cleanedPatchNode.remove("deleted");
                 cleanedPatchNode.remove("deletedAt");
-                JsonMergePatch jsonMergePatch = JsonMergePatch.fromJson(cleanedPatchNode);
-                JsonNode updatedJsonNode = jsonMergePatch.apply(objectMapper.readTree(existingRecordJson));
+                JsonNode updatedJsonNode = JsonPatchUtil.applyMergePatch(objectMapper.readTree(existingRecordJson), cleanedPatchNode);
 
                 Record updatedRecord = objectMapper.treeToValue(updatedJsonNode, Record.class);
 
@@ -503,7 +499,15 @@ public class RecordServiceImpl implements RecordService {
 
             } else {
                 //update record metadata status
+                boolean undelete = !patchRequest.getDeleted();
                 RecordState expectedNewStatus = patchRequest.getDeleted() ? RecordState.deleted : RecordState.active;
+
+                // Reviving a legally-withheld record is the compliance handler's authority, not the user's
+                if (undelete && (recordMetadata.getStatus() == RecordState.suspended || isLegalIncompliant(recordMetadata))) {
+                    throw new AppException(HttpStatus.SC_CONFLICT, "Record is legally withheld",
+                            "Record cannot be undeleted while its legal tags are incompliant");
+                }
+
                 if (recordMetadata.getStatus() != expectedNewStatus) {
                     recordMetadata.setStatus(expectedNewStatus);
                     recordMetadata.setModifyTime(System.currentTimeMillis());
@@ -521,6 +525,10 @@ public class RecordServiceImpl implements RecordService {
         } catch (Exception e) {
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Record patch failed", e.getMessage());
         }
+    }
+
+    private boolean isLegalIncompliant(RecordMetadata recordMetadata) {
+        return recordMetadata.getLegal() != null && recordMetadata.getLegal().getStatus() == LegalCompliance.incompliant;
     }
 
     private void validateRequest(RecordMergePatchRequest patchRequest) {

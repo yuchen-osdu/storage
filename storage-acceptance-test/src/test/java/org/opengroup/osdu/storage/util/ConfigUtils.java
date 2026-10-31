@@ -52,15 +52,14 @@ public class ConfigUtils {
     public boolean getIsSchemaEndpointsEnabled() {
         return getBooleanProperty("schema.endpoints.enabled", "true");
     }
-    public boolean getIsCollaborationEnabled() {
-        return getBooleanProperty("collaboration.enabled", "false");
-    }
 
     public boolean isTestReplayEnabled(){ return  getBooleanProperty("test.replay.enabled", "false");}
 
     public boolean getIsTestReplayAllEnabled() { return  getBooleanProperty("test.replayAll.enabled", "false");}
 
     public long getTimeoutForReplay() { return  getLongProperty("test.replayAll.timeout", "60");}
+
+    public long getLegalComplianceWaitSeconds() { return getLongProperty("test.legalCompliance.wait", "100");}
 
     private static String getEnvValue(String propertyName) {
         return EnvLoader.get(propertyName.toUpperCase().replaceAll("\\.", "_"));

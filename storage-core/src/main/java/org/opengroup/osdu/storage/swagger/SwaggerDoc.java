@@ -14,6 +14,9 @@
 
 package org.opengroup.osdu.storage.swagger;
 
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
 public class SwaggerDoc {
     public static final String PATCH_RECORD_OPERATIONS = "Record patch operations.";
 }

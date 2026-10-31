@@ -1,4 +1,4 @@
-FROM azul/zulu-openjdk:17-latest
+FROM azul/zulu-openjdk:25.0.4.1-jre
 
 WORKDIR /app
 
@@ -31,6 +31,5 @@ CMD java $JAVA_TOOL_OPTIONS \
          -Dserver.port=${PORT} \
          -Dlog4j.formatMsgNoLookups=true \
          -Dloader.path=plugins/ \
-         -Dloader.debug=true \
          -Dloader.main=org.opengroup.osdu.storage.provider.gcp.StorageCorePlusApplication \
          -jar /app/storage-${PROVIDER_NAME}.jar

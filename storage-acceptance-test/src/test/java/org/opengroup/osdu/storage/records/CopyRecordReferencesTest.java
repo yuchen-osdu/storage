@@ -56,7 +56,6 @@ public final class CopyRecordReferencesTest extends BaseRecordsAcceptanceTest {
   @Override
   public void setup() throws Exception {
     super.setup();
-    assumeTrue(configUtils.getIsCollaborationEnabled());
 
     recordIdSorToWip = getTenantId() + ":getrecord:" + UUID.randomUUID();
     recordIdWipToSor = getTenantId() + ":getrecord:" + UUID.randomUUID();

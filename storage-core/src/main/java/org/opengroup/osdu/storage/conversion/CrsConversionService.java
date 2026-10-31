@@ -80,10 +80,17 @@ public class CrsConversionService {
     private static final String TO_UNIT_Z = "{\"baseMeasurement\":{\"ancestry\":\"Length\",\"type\":\"UM\"},\"scaleOffset\":{\"offset\":0.0,\"scale\":1.0},\"symbol\":\"m\",\"type\":\"USO\"}";
     private static final String UNKNOWN_ERROR = "unknown error";
     private static final String INVALID_COORDINATES = "CRS conversion: invalid Coordinates values, no conversion applied. Error: %s";
-    private static final String BAD_REQUEST = "CRS conversion: bad request from crs converter, no conversion applied. Response From CRS Converter: %s.";
+    private static final String BAD_REQUEST = "CRS conversion: bad request from crs converter, no conversion applied. Affected property: %s. Response From CRS Converter: %s.";
     private static final String TIMEOUT_FAILURE = "CRS conversion: timeout on crs converter request, no conversion applied. Affected property: %s. Response From CRS Converter: %s.";
     private static final String CONVERSION_FAILURE = "CRS Conversion: point conversion failure (null response from crs converter), no conversion applied. Affected property names: %s, %s";
     private static final String OTHER_FAILURE = "CRS conversion: error from crs converter, no conversion applied. Affected property: %s. Response from CRS converter: %s.";
+    private static final String SERIALIZATION_FAILURE = "CRS conversion: converted result could not be written back to the record, no conversion applied. Affected property: %s.";
+    // A log line stands alone, so it needs the record ID that the conversion status carries structurally.
+    private static final String CONVERSION_FAILURE_LOG = "%s Record: %s.";
+    private static final String POINT_CONVERSION_SKIPPED = "CRS conversion: point conversion skipped because an earlier error was recorded for this record, no conversion applied. Affected property names: %s, %s";
+    // org.apache.http.HttpStatus has no constant for 429.
+    private static final int SC_TOO_MANY_REQUESTS = 429;
+    private static final String POINT_CONVERSION_CRS_UNAVAILABLE = "CRS conversion: crs converter was unavailable or throttled the request, no conversion applied. Affected property names: %s, %s. Response from CRS converter: %s.";
 
     @Autowired
     private CrsPropertySet crsPropertySet;
@@ -188,6 +195,8 @@ public class CrsConversionService {
             List<String> validationErrors = new ArrayList<>();
             JsonObject filteredObjects = this.dpsConversionService.filterDataFields(recordJsonObject, validationErrors);
             for (String attributeName : filteredObjects.keySet()) {
+                // statusBuilder is record-scoped, so a previous attribute's errors must not block this one.
+                int errorCountBeforeAttribute = statusBuilder.getErrors().size();
                 JsonObject asIngestedCoordinates = filteredObjects.getAsJsonObject(attributeName).getAsJsonObject(AS_INGESTED_COORDINATES);
                 if (asIngestedCoordinates != null) {
                     GeoJsonFeatureCollection fc = new GeoJsonFeatureCollection();
@@ -214,25 +223,30 @@ public class CrsConversionService {
                     ICrsConverterService crsConverterService = this.crsConverterFactory.create(this.customizeHeaderBeforeCallingCrsConversion(this.dpsHeaders), getRequestConfig());
                     ConvertGeoJsonRequest request = new ConvertGeoJsonRequest(fc, TO_CRS_GEO_JSON, TO_UNIT_Z);
                     try {
-                        if (statusBuilder.getErrors().isEmpty()) {
+                        if (statusBuilder.getErrors().size() == errorCountBeforeAttribute) {
                             ConvertGeoJsonResponse response = crsConverterService.convertGeoJson(request);
                             GeoJsonFeatureCollection wgs84Coordinates = response.getFeatureCollection();
                             wgs84Coordinates.setCoordinateReferenceSystemID(null);
                             wgs84Coordinates.setVerticalUnitID(null);
-                            this.appendObjectInRecord(recordJsonObject, attributeName, wgs84Coordinates);
+                            if (!this.appendObjectInRecord(recordJsonObject, attributeName, wgs84Coordinates)) {
+                                statusBuilder.addError(String.format(SERIALIZATION_FAILURE, attributeName));
+                            }
                         }
                     } catch (CrsConverterException crsEx) {
+                        String message;
                         if (crsEx.getHttpResponse().IsBadRequestCode()) {
-                            statusBuilder.addError(String.format(BAD_REQUEST, crsEx.getHttpResponse().getBody()));
+                            message = String.format(BAD_REQUEST, attributeName, crsEx.getHttpResponse().getBody());
                         } else if (crsEx.getHttpResponse().getResponseCode() == HttpStatus.SC_GATEWAY_TIMEOUT) {
-                            statusBuilder.addError(String.format(TIMEOUT_FAILURE, attributeName, crsEx.getHttpResponse().getBody()));
+                            message = String.format(TIMEOUT_FAILURE, attributeName, crsEx.getHttpResponse().getBody());
                         } else {
-                            String message = String.format(OTHER_FAILURE, attributeName, crsEx.getHttpResponse().toString());
-                            this.logger.error(message);
-                            statusBuilder.addError(message);
+                            message = String.format(OTHER_FAILURE, attributeName, crsEx.getHttpResponse().toString());
                         }
+                        this.logger.error(String.format(CONVERSION_FAILURE_LOG, message, statusBuilder.getId()));
+                        statusBuilder.addError(message);
                     } catch (AppException ex) {
-                        statusBuilder.addError(String.format(OTHER_FAILURE, attributeName, ex.getError().getMessage()));
+                        String message = String.format(OTHER_FAILURE, attributeName, ex.getError().getMessage());
+                        this.logger.error(String.format(CONVERSION_FAILURE_LOG, message, statusBuilder.getId()), ex);
+                        statusBuilder.addError(message);
                     }
                 } else {
                     statusBuilder.addError(CrsConversionServiceErrorMessages.MISSING_AS_INGESTED_COORDINATES);
@@ -297,6 +311,7 @@ public class CrsConversionService {
                 String propertyY = propertyYBuilder.toString();
                 if (propertyNamesRemain.contains(propertyY)) {
                     propertyY = this.getCaseSensitivePropertyY(propertyNames, propertyY);
+                    int errorCountBeforePair = conversionStatusBuilder.getErrors().size();
                     PointConversionInfo pointConversionInfo = this.initializePoint(recordIndex, recordId, metaItemIndex, metaBlocks, conversionStatusBuilder);
 
                     pointConversionInfo.setXFieldName(propertyX);
@@ -309,6 +324,9 @@ public class CrsConversionService {
 
                     if (conversionStatusBuilder.getStatus().equalsIgnoreCase(ConvertStatus.SUCCESS.toString())) {
                         this.addPointConversionInfoIntoConversionMap(persistableReference, pointConversionInfo, mapOfPoints);
+                    } else if (conversionStatusBuilder.getErrors().size() == errorCountBeforePair) {
+                        // Logged rather than added to the status: the response must keep the earlier error as the record's latest entry.
+                        this.logger.warning(String.format(CONVERSION_FAILURE_LOG, String.format(POINT_CONVERSION_SKIPPED, propertyX, propertyY), recordId));
                     }
 
                     propertyNamesRemain.remove(propertyX.toLowerCase());
@@ -511,6 +529,11 @@ public class CrsConversionService {
             } catch (CrsConverterException e) {
                 if (e.getHttpResponse().IsBadRequestCode()) {
                     convertedPointInfo.addAll(this.putDataErrorFromCrsIntoPointsInfo(pointsList, e.getMessage()));
+                } else if (e.getHttpResponse().getResponseCode() == SC_TOO_MANY_REQUESTS || e.getHttpResponse().isServerErrorCode()) {
+                    // Throwing would fail every record in the batch, and storage's 500 is not retried by the indexer.
+                    // Only this CRS group's records are affected, and they are not written back because nothing was converted.
+                    this.logger.error(String.format(CrsConversionServiceErrorMessages.CRS_OTHER_ERROR, e.getHttpResponse().toString()));
+                    this.addCrsUnavailableErrorToPoints(pointsList, e.getHttpResponse().toString());
                 } else {
                     this.logger.error(String.format(CrsConversionServiceErrorMessages.CRS_OTHER_ERROR, e.getHttpResponse().toString()));
                     throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, UNKNOWN_ERROR, "crs conversion service error.");
@@ -565,6 +588,12 @@ public class CrsConversionService {
         return convertedPointInfo;
     }
 
+    private void addCrsUnavailableErrorToPoints(List<PointConversionInfo> points, String crsResponse) {
+        for (PointConversionInfo point : points) {
+            point.getStatusBuilder().addError(String.format(POINT_CONVERSION_CRS_UNAVAILABLE, point.getXFieldName(), point.getYFieldName(), crsResponse));
+        }
+    }
+
     private void updateValuesInRecord(JsonObject recordJsonObject, PointConversionInfo convertedInfo, List<ConversionStatus.ConversionStatusBuilder> conversionStatuses) {
         JsonObject dataBlcok = recordJsonObject.getAsJsonObject(Constants.DATA);
 
@@ -582,7 +611,7 @@ public class CrsConversionService {
         recordJsonObject.add(Constants.META, metas);
     }
 
-    private void appendObjectInRecord(JsonObject recordJsonObject, String attributeName, GeoJsonFeatureCollection wgs84Coordinates) {
+    private boolean appendObjectInRecord(JsonObject recordJsonObject, String attributeName, GeoJsonFeatureCollection wgs84Coordinates) {
         ObjectMapper mapper = new ObjectMapper();
 
         try {
@@ -595,8 +624,10 @@ public class CrsConversionService {
             conversionBlock.add(Constants.WGS84_COORDINATES, convertObj);
             dataBlock.add(attributeName, conversionBlock);
             recordJsonObject.add(Constants.DATA, dataBlock);
+            return true;
         } catch (JsonProcessingException ex) {
-            logger.error(String.format("There was an error converting the schema to a JSON string. %s", ex.getMessage(), ex));
+            logger.error(String.format("There was an error converting the schema to a JSON string. %s", ex.getMessage()), ex);
+            return false;
         }
     }
 
@@ -686,33 +717,46 @@ public class CrsConversionService {
                     statusBuilder.addError(MISSING_GEOMETRIES);
                 } else {
                     GeoJsonGeometryCollection gc = new GeoJsonGeometryCollection();
-                    GeoJsonBase[] geometries = new GeoJsonBase[geometriesArray.size()];
+                    List<GeoJsonBase> geometries = new ArrayList<>(geometriesArray.size());
                     for (int k = 0; k < geometriesArray.size(); k++) {
-                        JsonObject geometryObj = geometriesArray.get(k).getAsJsonObject();
+                        JsonElement geometryElement = geometriesArray.get(k);
+                        if (!geometryElement.isJsonObject()) {
+                            // A non-object member has no type to report, so the raw value identifies it.
+                            statusBuilder.addError(String.format(CrsConversionServiceErrorMessages.INVALID_GEOMETRIES, geometryElement));
+                            continue;
+                        }
+                        JsonObject geometryObj = geometryElement.getAsJsonObject();
                         String geometriesType = conversionJsonUtils.isJsonObjectContainsProperty(geometryObj, TYPE) ? geometryObj.get(TYPE).getAsString() : "";
                         JsonArray coordinatesValues = conversionJsonUtils.isJsonObjectContainsProperty(geometryObj, COORDINATES) && conversionJsonUtils.isPropertyJsonArray(geometryObj, COORDINATES, statusBuilder) ? geometryObj.get(COORDINATES).getAsJsonArray() : new JsonArray();
                         JsonObject gmCoordinatesObj = this.getCoordinates(coordinatesValues, statusBuilder);
                         Gson gson = new Gson();
+                        GeoJsonBase geometryMember;
+                        // AbstractAnyCrsFeatureCollection permits only the AnyCrs* names here; the unprefixed ones are accepted for records already ingested against the earlier reading.
                         switch (geometriesType) {
-                            case POINT: geometries[k] = this.getGeoJsonPoint(gson, gmCoordinatesObj, statusBuilder);
+                            case ANY_CRS_POINT, POINT: geometryMember = this.getGeoJsonPoint(gson, gmCoordinatesObj, statusBuilder);
                                 break;
-                            case MULTIPOINT: geometries[k] = this.getGeoJsonMultiPoint(gson, gmCoordinatesObj, statusBuilder);
+                            case ANY_CRS_MULTIPOINT, MULTIPOINT: geometryMember = this.getGeoJsonMultiPoint(gson, gmCoordinatesObj, statusBuilder);
                                 break;
-                            case LINE_STRING: geometries[k] = this.getGeoJsonLineString(gson, gmCoordinatesObj, statusBuilder);
+                            case ANY_CRS_LINE_STRING, LINE_STRING: geometryMember = this.getGeoJsonLineString(gson, gmCoordinatesObj, statusBuilder);
                                 break;
-                            case MULTILINE_STRING: geometries[k] = this.getGeoJsonMultiLineString(gson, gmCoordinatesObj, statusBuilder);
+                            case ANY_CRS_MULTILINE_STRING, MULTILINE_STRING: geometryMember = this.getGeoJsonMultiLineString(gson, gmCoordinatesObj, statusBuilder);
                                 break;
-                            case POLYGON: geometries[k] = this.getGeoJsonPolygon(gson, gmCoordinatesObj, statusBuilder);
+                            case ANY_CRS_POLYGON, POLYGON: geometryMember = this.getGeoJsonPolygon(gson, gmCoordinatesObj, statusBuilder);
                                 break;
-                            case MULTIPOLYGON: geometries[k] = this.getGeoJsonMultiPolygon(gson, gmCoordinatesObj, statusBuilder);
+                            case ANY_CRS_MULTIPOLYGON, MULTIPOLYGON: geometryMember = this.getGeoJsonMultiPolygon(gson, gmCoordinatesObj, statusBuilder);
                                 break;
                             default: statusBuilder.addError(String.format(CrsConversionServiceErrorMessages.INVALID_GEOMETRIES, geometriesType));
+                                geometryMember = null;
                                 break;
                         }
-                        geometries[k].setType(geometriesType);
-                        gc.setGeometries(geometries);
-                        feature.setGeometry(gc);
+                        if (geometryMember != null) {
+                            // The converter accepts either spelling and normalizes the name it returns, so the ingested one is forwarded unchanged.
+                            geometryMember.setType(geometriesType);
+                            geometries.add(geometryMember);
+                        }
                     }
+                    gc.setGeometries(geometries.toArray(new GeoJsonBase[0]));
+                    feature.setGeometry(gc);
                 }
             } else {
                 JsonArray coordinatesValues = conversionJsonUtils.isJsonObjectContainsProperty(geometry, COORDINATES) && conversionJsonUtils.isPropertyJsonArray(geometry, COORDINATES, statusBuilder) ? geometry.get(COORDINATES).getAsJsonArray() : new JsonArray();

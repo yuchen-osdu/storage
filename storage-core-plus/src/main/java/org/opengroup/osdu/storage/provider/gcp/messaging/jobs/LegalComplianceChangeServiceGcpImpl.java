@@ -20,6 +20,7 @@ package org.opengroup.osdu.storage.provider.gcp.messaging.jobs;
 import static java.util.Collections.singletonList;
 
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +85,9 @@ public class LegalComplianceChangeServiceGcpImpl implements ILegalComplianceChan
                     recordsId.append(", ").append(recordMetadata.getId());
                 }
                 this.recordsRepo.createOrUpdate(recordsMetadata, Optional.empty());
-                this.messageBus.publishMessage(headers, pubsubInfos);
+                if (pubsubInfos.length > 0) {
+                    this.messageBus.publishMessage(headers, pubsubInfos);
+                }
                 this.auditLogger.updateRecordsComplianceStateSuccess(
                     singletonList("[" + recordsId.substring(2) + "]"));
                 results = this.recordsRepo.queryByLegal(lt.getChangedTagName(), complianceChangeInfo.getCurrent(), 500);
@@ -97,18 +100,21 @@ public class LegalComplianceChangeServiceGcpImpl implements ILegalComplianceChan
     private PubSubInfo[] updateComplianceStatus(ComplianceChangeInfo complianceChangeInfo,
         List<RecordMetadata> recordMetadata, Map<String, LegalCompliance> output) {
 
-        PubSubInfo[] pubsubInfo = new PubSubInfo[recordMetadata.size()];
+        List<PubSubInfo> pubsubInfo = new ArrayList<>();
+        RecordState expectedState = complianceChangeInfo.getNewState() == LegalCompliance.incompliant
+            ? RecordState.active : RecordState.suspended;
 
-        int i = 0;
         for (RecordMetadata rm : recordMetadata) {
             rm.getLegal().setStatus(complianceChangeInfo.getNewState());
-            rm.setStatus(complianceChangeInfo.getNewRecordState());
-            pubsubInfo[i] = new PubSubInfo(rm.getId(), rm.getKind(), complianceChangeInfo.getPubSubEvent());
             output.put(rm.getId(), complianceChangeInfo.getNewState());
-            i++;
+
+            if (rm.getStatus() == expectedState) {
+                rm.setStatus(complianceChangeInfo.getNewRecordState());
+                pubsubInfo.add(new PubSubInfo(rm.getId(), rm.getKind(), complianceChangeInfo.getPubSubEvent()));
+            }
         }
 
-        return pubsubInfo;
+        return pubsubInfo.toArray(new PubSubInfo[0]);
     }
 
     private ComplianceChangeInfo getComplianceChangeInfo(LegalTagChanged lt) {
@@ -118,7 +124,7 @@ public class LegalComplianceChangeServiceGcpImpl implements ILegalComplianceChan
             output = new ComplianceChangeInfo(LegalCompliance.compliant, OperationType.update, RecordState.active);
         } else if (lt.getChangedTagStatus().equalsIgnoreCase("incompliant")) {
             this.LegalTagCache.delete(lt.getChangedTagName());
-            output = new ComplianceChangeInfo(LegalCompliance.incompliant, OperationType.delete, RecordState.deleted);
+            output = new ComplianceChangeInfo(LegalCompliance.incompliant, OperationType.delete, RecordState.suspended);
         } else {
             this.logger.warning(String.format("Unknown LegalTag compliance status received %s %s",
                 lt.getChangedTagStatus(), lt.getChangedTagName()));
