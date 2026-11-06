@@ -10,12 +10,16 @@
     <parent>
         <groupId>org.opengroup.osdu</groupId>
         <artifactId>os-storage</artifactId>
-        <version>0.30.0-SNAPSHOT</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <properties>
-        <jackson.version>2.21.2</jackson.version>
+        <!-- Spring Boot 3.5.x still ships older Jackson; High CVEs need >= 2.21.4 -->
+        <jackson.version>2.21.6</jackson.version>
+        <!-- google-cloud-datastore 2.17.5 pulls vulnerable transitive versions -->
+        <protobuf.version>3.25.9</protobuf.version>
+        <grpc.version>1.75.0</grpc.version>
     </properties>
 
     <dependencyManagement>
@@ -34,12 +38,26 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Jackson override: Spring Boot 3.5.8 and other artifacts provides 2.19.4, we need 2.21.1 for GHSA-72hv-8253-57qq -->
-            <!-- Maybe remove this override when Spring Boot BOM updates to Jackson >= 2.21.1 -->
+            <!-- Jackson override: Spring Boot 3.5.x provides older Jackson; need >= 2.21.4 for High CVEs -->
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- google-cloud-datastore 2.17.5 brings protobuf 3.24.4 / grpc 1.59.0 (High CVEs) -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-bom</artifactId>
+                <version>${protobuf.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${grpc.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -68,13 +86,34 @@
                 <version>${spring-security.version}</version>
                 <type>pom</type>
             </dependency>
+            <!-- Re-apply after spring-boot-dependencies (this module re-imports that BOM) -->
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-websocket</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-jasper</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>storage-core</artifactId>
-            <version>0.30.0-SNAPSHOT</version>
+            <version>${revision}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.mockito</groupId>
@@ -89,7 +128,7 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>core-plus-common-lib</artifactId>
-            <version>0.27.0-rc3</version>
+            <version>1.0.0</version>
         </dependency>
         <!--
             os-core-common declares lettuce-core as provided. core-plus is packaged
@@ -103,17 +142,17 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-oqm-core</artifactId>
-            <version>0.28.2</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-osm-core</artifactId>
-            <version>0.27.5</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>os-obm-core</artifactId>
-            <version>0.30.5</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback.contrib</groupId>
@@ -149,14 +188,13 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.1</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-junit-jupiter</artifactId>
-            <version>5.7.0</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <!--TODO used only in TypeMapper.class, dependency should be removed later when clean dev env is created.-->
@@ -168,7 +206,7 @@
         <dependency>
             <groupId>org.opengroup.osdu</groupId>
             <artifactId>apd-core</artifactId>
-            <version>0.26.0</version>
+            <version>1.0.0</version>
         </dependency>
 
         <dependency>
@@ -182,7 +220,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>${spring-boot-maven-plugin.version}</version>
                 <configuration>
                     <profiles>
                         <profile>
@@ -209,8 +247,12 @@
                         </goals>
                         <configuration>
                             <classifier>spring-boot</classifier>
+                            <!-- ZIP layout: Main-Class is PropertiesLauncher (Boot 3.2+ package
+                                 org.springframework.boot.loader.launch). Required for
+                                 -Dloader.path=plugins/ in the CIMPL image. -->
+                            <layout>ZIP</layout>
                             <mainClass>
-                                org.springframework.boot.loader.PropertiesLauncher
+                                org.opengroup.osdu.storage.provider.gcp.StorageCorePlusApplication
                             </mainClass>
                         </configuration>
                     </execution>
@@ -228,19 +270,21 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.2</version>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <argLine>
                         @{argLine} --add-opens java.base/java.util=ALL-UNNAMED
                         --add-opens java.base/java.lang=ALL-UNNAMED
                     </argLine>
+                    <useFile>false</useFile>
+                    <trimStackTrace>false</trimStackTrace>
                 </configuration>
             </plugin>
 
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.10</version>
+                <version>${jacoco-maven-plugin.version}</version>
                 <executions>
                     <execution>
                         <goals>

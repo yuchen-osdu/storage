@@ -1,15 +1,8 @@
 # Collaboration Integration
 
-All APIs in storage service are [collaboration context-aware](CollaborationContext.md) in Azure CSP when the collaboration context feature flag is set to true. More details about the feature flag are provided in this [Wiki](https://community.opengroup.org/groups/osdu/platform/-/wikis/Feature-Flag).
+All APIs in storage service are [collaboration context-aware](CollaborationContext.md) when the collaboration context feature flag is set to true. More details about the feature flag are provided in this [Wiki](https://community.opengroup.org/groups/osdu/platform/-/wikis/Feature-Flag).
 
-CSPs that support collaborations functionality yet are indicated below-
-
-| CSP   | Supports Collaboration ? |
-|:------|:-------------------------|
-| Azure | Yes                      |
-| IBM   | No                       |
-| GCP   | No                       |
-| AWS   | No                       |
+Core-plus publishes x-collaboration record changes to the V2 topic.
 
 For a CSP who wants to support x-collaboration namespaces, it is necessary to upgrade its messaging infrastructure by adding the "records changed V2" topic in addition to the existing "records changed (V1)". The new topic is to be dedicated to the messages sent by the Storage service for record changes in the x-collaboration context. So the V1 topic is for SOR (default) namespace messages only, and the V2 topic is for x-collaboration messages only.
 

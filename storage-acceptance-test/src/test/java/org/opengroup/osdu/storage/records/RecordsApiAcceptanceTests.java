@@ -1,4 +1,4 @@
-// Copyright 2017-2019, Schlumberger
+// Copyright 2017-2026, Schlumberger
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.opengroup.osdu.storage.util.RecordUtil;
 import org.opengroup.osdu.storage.util.TestUtils;
 
 public final class RecordsApiAcceptanceTests extends BaseRecordsAcceptanceTest {
@@ -86,6 +87,30 @@ public final class RecordsApiAcceptanceTests extends BaseRecordsAcceptanceTest {
     StorageRecord recordResult = response.body();
     assertEquals("Flor\u00e9", recordResult.data().get("name"));
     assertNull(recordResult.data().get("ancestry"));
+  }
+
+  @Test
+  public void should_createNewRecords_whenTheyHaveSameFirst100Characters() {
+    long now = System.currentTimeMillis();
+    String sharedPrefix = getTenantId()
+        + ":marker:hij-osdu-dev-sis-internal-hq-techlog--A52C-4031-99D1---124CBB92-8C80-4668-BB48-1329C5FE241C--";
+    String firstId = sharedPrefix + "1." + now;
+    String secondId = sharedPrefix + "9." + now;
+    assertTrue(sharedPrefix.length() > 100);
+
+    StorageRecord[] records = withTestAcl(new StorageRecord[] {
+        singleEntityRecord(firstId, "TestCreation", kind, legalTag),
+        singleEntityRecord(secondId, "TestCreation", kind, legalTag)});
+
+    HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(records);
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+    assertEquals(2, createResponse.body().recordCount());
+
+    for (String id : List.of(firstId, secondId)) {
+      HttpResponse<StorageRecord> response = storageClient.getRecord(id);
+      assertEquals(HttpStatus.SC_OK, response.statusCode());
+      assertEquals(id, response.body().id());
+    }
   }
 
   @Test
@@ -236,6 +261,18 @@ public final class RecordsApiAcceptanceTests extends BaseRecordsAcceptanceTest {
     assertEquals("Foo", responseJson.data().get("name"));
 
     storageClient.deleteRecord(wholeRecordId);
+  }
+
+  @Test
+  public void should_preserveNumberRepresentation_when_recordIsIngestedWithDecimals() throws Exception {
+    final String decimalRecordId = getTenantId() + ":inttest:decimals-" + System.currentTimeMillis();
+    var createResponse = storageClient.putRecords(
+        withTestAcl(RecordUtil.createRecordsWithDecimalData(decimalRecordId, kind, legalTag)));
+    assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+
+    assertRecordJsonContains(decimalRecordId, RecordUtil.DECIMAL_DATA_FRAGMENTS);
+
+    storageClient.deleteRecord(decimalRecordId);
   }
 
   @Test

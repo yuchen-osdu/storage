@@ -64,16 +64,6 @@
       </configuration>
     </server>
 
-    <server>
-      <id>azure-auth</id>
-      <configuration>
-        <tenant>${env.AZURE_TENANT_ID}</tenant>
-        <client>${env.AZURE_CLIENT_ID}</client>
-        <key>${env.AZURE_CLIENT_SECRET}</key>
-        <environment>AZURE</environment>
-      </configuration>
-    </server>
-
       <server>
         <id>os-core</id>
         <username>slb-des-ext-collaboration</username>

@@ -24,7 +24,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.logging.JaxRsDpsLog;
 import org.opengroup.osdu.core.common.model.entitlements.Acl;
 import org.opengroup.osdu.core.common.model.http.AppException;
@@ -50,7 +49,6 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
 
 @ExtendWith(MockitoExtension.class)
 public class PersistenceServiceImplTest {
@@ -78,8 +76,6 @@ public class PersistenceServiceImplTest {
     @Mock
     private JaxRsDpsLog logger;
 
-    @Mock
-    private IFeatureFlag collaborationFeatureFlag;
 
     @InjectMocks
     private PersistenceServiceImpl sut;
@@ -104,8 +100,6 @@ public class PersistenceServiceImplTest {
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void should_persistRecords_when_noExceptionIsThrown() {
-
-        when(collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)).thenReturn(false);
 
         this.setupRecordRepository(25, 23, 25);
 
@@ -139,9 +133,7 @@ public class PersistenceServiceImplTest {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public void should_persistRecords_when_noExceptionIsThrown_when_collaborationIsEmptyAndFFIsEnabled() {
-
-        when(collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
+    public void should_publish_v1_when_collaboration_is_empty() {
 
         this.setupRecordRepository(25, 23, 25);
 
@@ -166,20 +158,17 @@ public class PersistenceServiceImplTest {
         assertEquals(48, list1.size());
 
         ArgumentCaptor<PubSubInfo[]> pubsubCaptor = ArgumentCaptor.forClass(PubSubInfo[].class);
-        ArgumentCaptor<RecordChangedV2[]> recordChangedV2Captor = ArgumentCaptor.forClass(RecordChangedV2[].class);
 
-        verify(this.pubSubClient).publishMessage(eq(Optional.empty()), eq(this.headers), recordChangedV2Captor.capture());
-        verify(this.pubSubClient, never()).publishMessage(eq(this.headers), any(PubSubInfo[].class));
+        verify(this.pubSubClient).publishMessage(eq(this.headers), pubsubCaptor.capture());
 
-        this.assertRecordChangedV2Info(48, recordChangedV2Captor.getAllValues());
+        verify(this.pubSubClient, never()).publishMessage(any(Optional.class), eq(this.headers), any(RecordChangedV2[].class));
+
         verify(this.cloudStorage, times(0)).delete(any(RecordMetadata.class));
     }
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void should_persistRecords_when_noExceptionIsThrown_when_collaborationIsPresentAndFFIsEnabled() {
-
-        when(collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
 
         this.setupRecordRepository(25, 23, 25);
 

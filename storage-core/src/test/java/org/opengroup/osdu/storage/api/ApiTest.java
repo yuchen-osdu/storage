@@ -20,7 +20,6 @@ import org.mockito.Mockito;
 import org.opengroup.osdu.core.common.cache.ICache;
 import org.opengroup.osdu.core.common.entitlements.IEntitlementsFactory;
 import org.opengroup.osdu.core.common.entitlements.IEntitlementsService;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.http.CollaborationContextFactory;
 import org.opengroup.osdu.core.common.model.entitlements.EntitlementsException;
 import org.opengroup.osdu.core.common.model.entitlements.GroupInfo;
@@ -95,9 +94,6 @@ public abstract class ApiTest<T> {
 
     @MockBean
     protected RecordBlocks recordBlocks;
-
-    @MockBean
-    protected IFeatureFlag collaborationFeatureFlag;
 
     @MockBean
     protected ITenantInfoService tenantInfoService;

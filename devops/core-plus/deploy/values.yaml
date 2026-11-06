@@ -21,7 +21,6 @@ data:
   legalHost: "http://legal"
   opaEnabled: false
   opaEndpoint: "http://opa"
-  collaborationsEnabled: true
   # Otel
   javaToolOptions: ""
   otelExporterEndpoint: ""

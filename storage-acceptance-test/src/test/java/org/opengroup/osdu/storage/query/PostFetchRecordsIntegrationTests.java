@@ -33,6 +33,7 @@ import java.util.UUID;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.opengroup.osdu.core.common.Constants;
 import org.opengroup.osdu.core.test.client.ClientException;
 import org.opengroup.osdu.storage.records.BaseRecordsAcceptanceTest;
 import org.opengroup.osdu.storage.util.RecordUtil;
@@ -69,7 +70,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnSingleRecordMatching_when_noConversionRequired() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -95,7 +96,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordMatchingAndRecordNotFound_when_noConversionRequired() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithReference(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
         String notExistingId = RECORD_ID_PREFIX + "nonexisting:id";
@@ -220,7 +221,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenConversionRequiredAndConversionErrorExists() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsMissingValue(2, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsMissingValue(2, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -248,7 +249,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenConversionRequiredAndNestedPropertyProvidedInMetaBlock() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -271,7 +272,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenConversionRequiredAndNestedPropertyProvidedInMetaBlock1() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedProperty(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS"));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -293,8 +294,8 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenDateAndFormatProvidedInMetaBlock() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithDateFormat(1, recordId, KIND, LEGAL_TAG,
-            "creationDate", "2019-08-03", DATETIME_PERSISTABLE_REFERENCE);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithDateFormat(1, recordId, KIND, LEGAL_TAG,
+            "creationDate", "2019-08-03", DATETIME_PERSISTABLE_REFERENCE));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -318,7 +319,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     public void should_returnRecordsAndConversionStatus_whenNestedArrayOfPropertiesProvidedWithoutError() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
 
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit",  UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit",  UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -347,7 +348,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenNestedArrayOfPropertiesProvidedWithInvalidValues() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -374,7 +375,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenInhomogeneousNestedArrayOfPropertiesProvidedWithoutError() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithInhomogeneousNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithInhomogeneousNestedArrayOfProperties(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -400,7 +401,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenInhomogeneousNestedArrayOfPropertiesProvidedWithInvalidValues() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndInvalidValues(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -427,7 +428,7 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
     @Test
     public void should_returnRecordsAndConversionStatus_whenInhomogeneousNestedArrayOfPropertiesProvidedWithIndexOutOfBoundary() {
         String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
-        StorageRecord[] jsonInput = RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndIndexOutOfBoundary(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID);
+        StorageRecord[] jsonInput = withTestAcl(RecordUtil.createRecordsWithInhomogeneousNestedArrayOfPropertiesAndIndexOutOfBoundary(1, recordId, KIND, LEGAL_TAG, UNIT_PERSISTABLE_REFERENCE, "Unit", UNIT_OF_MEASURE_ID));
         HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
         assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
 
@@ -617,13 +618,192 @@ public final class PostFetchRecordsIntegrationTests extends BaseRecordsAcceptanc
         assertEquals(0, responseObject.notFound().length);
         assertEquals(1, responseObject.conversionStatuses().size());
         assertEquals("SUCCESS", responseObject.conversionStatuses().get(0).status());
+        List<String> conversionErrors = responseObject.conversionStatuses().get(0).errors();
+        assertTrue(conversionErrors == null || conversionErrors.isEmpty(), "unexpected conversion errors: " + conversionErrors);
 
         assertEquals(KIND, responseObject.records()[0].kind());
         assertTrue(responseObject.records()[0].version() != null && !responseObject.records()[0].version().isEmpty());
         assertEquals(1, responseObject.records()[0].data().size());
+        // SpatialLocation is the ingested block and is present either way; only Wgs84Coordinates proves the converter ran.
+        assertNotNull(wgs84CoordinatesOf(responseObject, recordId + 0));
 
         var deleteResponse1 = storageClient.deleteRecord(recordId + 0);
         assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse1.statusCode());
+    }
+
+    @Test
+    public void should_returnRecordsAfterCrsConversion__whenGeometryCollectionMemberUsesAnyCrsName() {
+        assertGeometryCollectionMemberConverts(Constants.ANY_CRS_POINT);
+    }
+
+    private void assertGeometryCollectionMemberConverts(String collectionMemberType) {
+        String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
+        StorageRecord[] jsonInput = RecordUtil.createRecordsWithAsIngestedCoordinates(1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE_CRS, PERSISTABLE_REFERENCE_UNIT_Z, "AnyCrsGeometryCollection", "SpatialLocation", collectionMemberType);
+        HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
+        assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+
+        try {
+            var fetchResponse = storageClient.queryRecordsBatchPost(QueryRecordsRequest.of(recordId + 0), Map.of(FRAME_OF_REFERENCE_NAME, FRAME_OF_REFERENCE_VAL));
+            assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+
+            ConvertedRecords responseObject = fetchResponse.body();
+            assertEquals(1, responseObject.records().length);
+            assertEquals(0, responseObject.notFound().length);
+            assertEquals(1, responseObject.conversionStatuses().size());
+            assertEquals("SUCCESS", responseObject.conversionStatuses().get(0).status());
+            List<String> conversionErrors = responseObject.conversionStatuses().get(0).errors();
+            assertTrue(conversionErrors == null || conversionErrors.isEmpty(), "unexpected conversion errors: " + conversionErrors);
+
+            assertEquals(KIND, responseObject.records()[0].kind());
+            assertNotNull(responseObject.records()[0].data().get("SpatialLocation"));
+            // SpatialLocation is the ingested block and is present either way; only Wgs84Coordinates proves the converter ran.
+            assertNotNull(wgs84CoordinatesOf(responseObject, recordId + 0));
+        } finally {
+            deleteRecord(recordId + 0);
+        }
+    }
+
+    @Test
+    public void should_returnRecordsAfterCrsConversion__whenGeometryCollectionHasMultipleNonAnyCrsMembers() {
+        String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
+        createGeometryCollectionRecord(recordId, Constants.POINT, Constants.MULTIPOINT);
+
+        try {
+            var fetchResponse = storageClient.queryRecordsBatchPost(QueryRecordsRequest.of(recordId),
+                    Map.of(FRAME_OF_REFERENCE_NAME, FRAME_OF_REFERENCE_VAL));
+            assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+
+            ConvertedRecords responseObject = fetchResponse.body();
+            assertEquals(0, responseObject.notFound().length);
+            assertEquals(1, responseObject.records().length);
+            assertEquals(1, responseObject.conversionStatuses().size());
+
+            assertConvertedCleanly(responseObject, recordId);
+            assertNotNull(wgs84CoordinatesOf(responseObject, recordId));
+        } finally {
+            deleteRecord(recordId);
+        }
+    }
+
+    @Test
+    public void should_convertBothSpellingsIdentically__whenGeometryCollectionMembersDifferOnlyByDiscriminator() {
+        String anyCrsRecordId = RECORD_ID_PREFIX + UUID.randomUUID();
+        String standardRecordId = RECORD_ID_PREFIX + UUID.randomUUID();
+
+        createGeometryCollectionRecord(anyCrsRecordId, Constants.ANY_CRS_POINT, Constants.ANY_CRS_MULTIPOINT);
+        createGeometryCollectionRecord(standardRecordId, Constants.POINT, Constants.MULTIPOINT);
+
+        try {
+            // The Indexer fetches records for conversion with exactly this call: POST query/records:batch
+            // carrying DpsHeaders.FRAME_OF_REFERENCE set to Constants.SLB_FRAME_OF_REFERENCE_VALUE.
+            var fetchResponse = storageClient.queryRecordsBatchPost(
+                    QueryRecordsRequest.of(anyCrsRecordId, standardRecordId),
+                    Map.of(FRAME_OF_REFERENCE_NAME, FRAME_OF_REFERENCE_VAL));
+            assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+
+            ConvertedRecords responseObject = fetchResponse.body();
+            assertEquals(0, responseObject.notFound().length);
+            assertEquals(2, responseObject.records().length);
+            assertEquals(2, responseObject.conversionStatuses().size());
+
+            assertConvertedCleanly(responseObject, anyCrsRecordId);
+            assertConvertedCleanly(responseObject, standardRecordId);
+
+            Object anyCrsConverted = wgs84CoordinatesOf(responseObject, anyCrsRecordId);
+            Object standardConverted = wgs84CoordinatesOf(responseObject, standardRecordId);
+            assertEquals(standardConverted, anyCrsConverted,
+                    "AnyCrs-named and standard-named geometry collection members converted differently");
+        } finally {
+            deleteRecord(anyCrsRecordId);
+            deleteRecord(standardRecordId);
+        }
+    }
+
+    @Test
+    public void should_return200WithErrorStatus_whenGeometryCollectionMemberDiscriminatorIsUnknown() {
+        // Regression test: before the fix, an unrecognized member discriminator left a null slot in a
+        // fixed-size array and getFeature() NPE'd, turning this into a 500 instead of a reported error.
+        String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
+        createGeometryCollectionRecord(recordId, "Circle", "MultiPoint");
+
+        try {
+            var fetchResponse = storageClient.queryRecordsBatchPost(QueryRecordsRequest.of(recordId),
+                    Map.of(FRAME_OF_REFERENCE_NAME, FRAME_OF_REFERENCE_VAL));
+            assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+
+            ConvertedRecords responseObject = fetchResponse.body();
+            assertEquals(0, responseObject.notFound().length);
+            assertEquals(1, responseObject.records().length);
+            assertEquals(1, responseObject.conversionStatuses().size());
+
+            RecordStatus status = responseObject.conversionStatuses().get(0);
+            assertEquals(recordId, status.id());
+            assertEquals("ERROR", status.status());
+            assertTrue(status.errors().stream().anyMatch(error -> error.contains("Circle")), status.errors().toString());
+        } finally {
+            deleteRecord(recordId);
+        }
+    }
+
+    @Test
+    public void should_keepTheEarlierErrorAsTheLatestEntry_whenALaterCoordinatePairIsSkipped() {
+        String recordId = RECORD_ID_PREFIX + UUID.randomUUID();
+        StorageRecord[] jsonInput = RecordUtil.createRecordsWithOneFailingAndOneSucceedingPairOfCoordinates(
+                1, recordId, KIND, LEGAL_TAG, PERSISTABLE_REFERENCE, "CRS");
+        HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
+        assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+
+        try {
+            var fetchResponse = storageClient.queryRecordsBatchPost(QueryRecordsRequest.of(recordId + 0),
+                    Map.of(FRAME_OF_REFERENCE_NAME, FRAME_OF_REFERENCE_VAL));
+            assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
+
+            ConvertedRecords responseObject = fetchResponse.body();
+            assertEquals(1, responseObject.conversionStatuses().size());
+            RecordStatus status = responseObject.conversionStatuses().get(0);
+            assertEquals("ERROR", status.status());
+            // The skipped pair is only logged, so the indexer still sees the real cause as the latest entry.
+            assertTrue(status.errors().stream().noneMatch(error -> error.contains("point conversion skipped")),
+                    status.errors().toString());
+            String latestError = status.errors().get(status.errors().size() - 1);
+            assertTrue(latestError.contains("'Y' is missing"), status.errors().toString());
+        } finally {
+            deleteRecord(recordId + 0);
+        }
+    }
+
+    private void createGeometryCollectionRecord(String recordId, String pointType, String multiPointType) {
+        StorageRecord[] jsonInput = RecordUtil.createRecordsWithGeometryCollection(recordId, KIND, LEGAL_TAG,
+                PERSISTABLE_REFERENCE_CRS, PERSISTABLE_REFERENCE_UNIT_Z, pointType, multiPointType, "SpatialLocation");
+        HttpResponse<CreateRecordsResponse> createResponse = storageClient.putRecords(jsonInput);
+        assertEquals(HttpStatus.SC_CREATED, createResponse.statusCode());
+    }
+
+    private void deleteRecord(String recordId) {
+        var deleteResponse = storageClient.deleteRecord(recordId);
+        assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.statusCode());
+    }
+
+    private static void assertConvertedCleanly(ConvertedRecords responseObject, String recordId) {
+        RecordStatus status = responseObject.conversionStatuses().stream()
+                .filter(s -> recordId.equals(s.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no conversion status for " + recordId));
+        assertEquals("SUCCESS", status.status(), "conversion did not succeed for " + recordId);
+        assertTrue(status.errors() == null || status.errors().isEmpty(), "conversion errors for " + recordId + ": " + status.errors());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object wgs84CoordinatesOf(ConvertedRecords responseObject, String recordId) {
+        StorageRecord record = java.util.Arrays.stream(responseObject.records())
+                .filter(r -> recordId.equals(r.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("record not returned: " + recordId));
+        Map<String, Object> spatialLocation = (Map<String, Object>) record.data().get("SpatialLocation");
+        assertNotNull(spatialLocation, "SpatialLocation missing from " + recordId);
+        Object wgs84 = spatialLocation.get(Constants.WGS84_COORDINATES);
+        assertNotNull(wgs84, "Wgs84Coordinates missing from " + recordId + " - conversion produced no output");
+        return wgs84;
     }
 
     @Test

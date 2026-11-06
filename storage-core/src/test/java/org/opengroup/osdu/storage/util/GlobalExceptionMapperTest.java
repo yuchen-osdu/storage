@@ -46,13 +46,23 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 
 import java.io.IOException;
+import java.util.Collections;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.http.MediaType;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.ObjectError;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.verify;
@@ -264,6 +274,36 @@ public class GlobalExceptionMapperTest {
 	}
 
 	@Test
+	public void should_returnUnsupportedMediaTypeAsAppError_when_HttpMediaTypeNotSupportedExceptionIsCaptured() {
+		HttpMediaTypeNotSupportedException exception =
+				new HttpMediaTypeNotSupportedException(MediaType.TEXT_PLAIN, List.of(MediaType.APPLICATION_JSON));
+
+		ResponseEntity<Object> response = this.sut.handleHttpMediaTypeNotSupported(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_UNSUPPORTED_MEDIA_TYPE),
+				Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_UNSUPPORTED_MEDIA_TYPE, response.getStatusCode().value());
+		assertNotNull(response.getBody());
+		assertEquals(AppError.class, response.getBody().getClass());
+		assertEquals("Unsupported media type.", ((AppError) response.getBody()).getReason());
+	}
+
+	@Test
+	public void should_returnNotAcceptableAsAppError_when_HttpMediaTypeNotAcceptableExceptionIsCaptured() {
+		HttpMediaTypeNotAcceptableException exception =
+				new HttpMediaTypeNotAcceptableException(List.of(MediaType.APPLICATION_JSON));
+
+		ResponseEntity<Object> response = this.sut.handleHttpMediaTypeNotAcceptable(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_NOT_ACCEPTABLE),
+				Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_NOT_ACCEPTABLE, response.getStatusCode().value());
+		assertNotNull(response.getBody());
+		assertEquals(AppError.class, response.getBody().getClass());
+		assertEquals("Not acceptable.", ((AppError) response.getBody()).getReason());
+	}
+
+	@Test
 	public void should_returnBadRequest_when_HttpMessageNotReadableWithValueInstantiationException() {
 		ValueInstantiationException cause = Mockito.mock(ValueInstantiationException.class);
 		HttpMessageNotReadableException exception = new HttpMessageNotReadableException(
@@ -274,5 +314,107 @@ public class GlobalExceptionMapperTest {
 
 		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getStatusCode().value());
 	}
+
+	@Test
+	public void should_returnBadRequestWithAllViolationMessages_when_HandlerMethodValidationExceptionIsCaptured() {
+		MessageSourceResolvable error1 = Mockito.mock(MessageSourceResolvable.class);
+		when(error1.getDefaultMessage()).thenReturn("must not be blank");
+		MessageSourceResolvable error2 = Mockito.mock(MessageSourceResolvable.class);
+		when(error2.getDefaultMessage()).thenReturn("size must be between 1 and 100");
+
+		ParameterValidationResult paramResult1 = Mockito.mock(ParameterValidationResult.class);
+		when(paramResult1.getResolvableErrors()).thenReturn(List.of(error1));
+		ParameterValidationResult paramResult2 = Mockito.mock(ParameterValidationResult.class);
+		when(paramResult2.getResolvableErrors()).thenReturn(List.of(error2));
+
+		HandlerMethodValidationException exception = Mockito.mock(HandlerMethodValidationException.class);
+		Mockito.doReturn(List.of(paramResult1, paramResult2)).when(exception).getAllValidationResults();
+
+		ResponseEntity<Object> response = this.sut.handleHandlerMethodValidationException(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_BAD_REQUEST), Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getStatusCode().value());
+		assertNotNull(response.getBody());
+		assertEquals(AppError.class, response.getBody().getClass());
+		AppError body = (AppError) response.getBody();
+		assertEquals("Validation error.", body.getReason());
+		assertEquals("must not be blank; size must be between 1 and 100", body.getMessage());
+	}
+
+	@Test
+	public void should_skipBlankMessages_when_HandlerMethodValidationExceptionHasBlankDefaultMessage() {
+		MessageSourceResolvable blankError = Mockito.mock(MessageSourceResolvable.class);
+		when(blankError.getDefaultMessage()).thenReturn(null);
+		MessageSourceResolvable realError = Mockito.mock(MessageSourceResolvable.class);
+		when(realError.getDefaultMessage()).thenReturn("must not be null");
+
+		ParameterValidationResult paramResult = Mockito.mock(ParameterValidationResult.class);
+		when(paramResult.getResolvableErrors()).thenReturn(List.of(blankError, realError));
+
+		HandlerMethodValidationException exception = Mockito.mock(HandlerMethodValidationException.class);
+		Mockito.doReturn(List.of(paramResult)).when(exception).getAllValidationResults();
+
+		ResponseEntity<Object> response = this.sut.handleHandlerMethodValidationException(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_BAD_REQUEST), Mockito.mock(WebRequest.class));
+
+		AppError body = (AppError) response.getBody();
+		assertEquals("must not be null", body.getMessage());
+	}
+
+	@Test
+	public void should_returnFallbackMessage_when_HandlerMethodValidationExceptionHasNoErrors() {
+		HandlerMethodValidationException exception = Mockito.mock(HandlerMethodValidationException.class);
+		Mockito.doReturn(Collections.emptyList()).when(exception).getAllValidationResults();
+
+		ResponseEntity<Object> response = this.sut.handleHandlerMethodValidationException(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_BAD_REQUEST), Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getStatusCode().value());
+		AppError body = (AppError) response.getBody();
+		assertEquals("Validation error.", body.getMessage());
+	}
+
+	@Test
+	public void should_returnBadRequestAsPlainJson_when_MissingRequestHeaderExceptionIsCaptured() throws Exception {
+		MissingRequestHeaderException exception = Mockito.mock(MissingRequestHeaderException.class);
+		when(exception.getMessage()).thenReturn("Required request header 'x-collaboration' is not present");
+
+		ResponseEntity<Object> response = this.sut.handleServletRequestBindingException(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_BAD_REQUEST), Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getStatusCode().value());
+		assertNotNull(response.getBody());
+		assertEquals(AppError.class, response.getBody().getClass());
+		assertEquals("Validation error.", ((AppError) response.getBody()).getReason());
+	}
+
+	@Test
+	public void should_returnInternalServerErrorAsAppError_when_MissingPathVariableExceptionIsCaptured() {
+		MissingPathVariableException exception = Mockito.mock(MissingPathVariableException.class);
+		when(exception.getMessage()).thenReturn("Required path variable 'id' is not present");
+
+		ResponseEntity<Object> response = this.sut.handleServletRequestBindingException(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_INTERNAL_SERVER_ERROR),
+				Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_INTERNAL_SERVER_ERROR, response.getStatusCode().value());
+		assertNotNull(response.getBody());
+		assertEquals(AppError.class, response.getBody().getClass());
+		assertEquals("Server error.", ((AppError) response.getBody()).getReason());
+	}
+
+	@Test
+	public void should_returnBadRequestAsPlainJson_when_MissingServletRequestParameterExceptionIsCaptured() {
+		MissingServletRequestParameterException exception =
+				new MissingServletRequestParameterException("kind", "String");
+
+		ResponseEntity<Object> response = this.sut.handleMissingServletRequestParameter(
+				exception, new HttpHeaders(), HttpStatusCode.valueOf(HttpStatus.SC_BAD_REQUEST), Mockito.mock(WebRequest.class));
+
+		assertEquals(HttpStatus.SC_BAD_REQUEST, response.getStatusCode().value());
+		assertNotNull(response.getBody());
+		assertEquals(AppError.class, response.getBody().getClass());
+	}
+
 }
 

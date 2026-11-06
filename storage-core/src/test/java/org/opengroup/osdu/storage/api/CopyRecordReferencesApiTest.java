@@ -20,7 +20,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.google.gson.Gson;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.opengroup.osdu.storage.model.CopyRecordReferencesModel;
 import org.opengroup.osdu.storage.service.CopyRecordReferencesService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class CopyRecordReferencesApiTest {
 
   private static final String COPY_RECORDS_PATH = "/records/copy";
+  private static final String UUID = "a99cef48-2ed6-4beb-8a43-002373431f13";
 
   @Autowired
   private MockMvc mockMvc;
@@ -44,15 +48,33 @@ class CopyRecordReferencesApiTest {
   private CopyRecordReferencesService service;
   private final Gson gson = new Gson();
 
-  @Test
-  void should_return_status_200_when_get_project() throws Exception {
+  static Stream<String> acceptedCollaborationHeaders() {
+    return Stream.of(
+        "id=" + UUID + ",application=pws",
+        "application=pws,id=" + UUID,
+        "id=" + UUID + ", application=pws",
+        "ID=" + UUID + ",Application=pws",
+        "id=" + UUID + ",application=pws,OtherFutureDirective=x",
+        // SOR source: application only (no id)
+        "application=pws");
+  }
+
+  @ParameterizedTest
+  @MethodSource("acceptedCollaborationHeaders")
+  void should_return_status_200_for_flexible_collaboration_headers(String collaborationHeader)
+      throws Exception {
     CopyRecordReferencesModel request = CopyRecordReferencesModel.builder()
-        .target("a99cef48-2ed6-4beb-8a43-002373431f13").build();
+        .target(UUID).build();
     mockMvc.perform(put(COPY_RECORDS_PATH)
-            .header("x-collaboration", "id=a99cef48-2ed6-4beb-8a43-002373431f13,application=pws")
+            .header("x-collaboration", collaborationHeader)
             .contentType(MediaType.APPLICATION_JSON)
             .content(gson.toJson(request)))
         .andExpect(status().isOk());
   }
-}
 
+  @Test
+  void should_return_status_200_when_get_project() throws Exception {
+    should_return_status_200_for_flexible_collaboration_headers(
+        "id=" + UUID + ",application=pws");
+  }
+}
