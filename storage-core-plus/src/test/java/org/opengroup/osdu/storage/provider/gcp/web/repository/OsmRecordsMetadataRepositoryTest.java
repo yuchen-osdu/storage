@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyCollection;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
@@ -224,7 +225,7 @@ class OsmRecordsMetadataRepositoryTest {
   @Test
   void get_shouldReturnRecordForStandardCase() {
     RecordMetadata recordMetadata = createRecordMetadata(TEST_ID);
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Collections.singletonList(recordMetadata));
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Collections.singletonList(recordMetadata));
 
     RecordMetadata result = repository.get(TEST_ID, Optional.empty());
 
@@ -237,7 +238,7 @@ class OsmRecordsMetadataRepositoryTest {
     CollaborationContext collabContext = createCollaborationContext();
     String prefixedId = COLLAB_ID + ":" + COLLAB_APP + ":" + TEST_ID;
     RecordMetadata collabRecord = createRecordMetadata(prefixedId);
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Collections.singletonList(collabRecord));
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Collections.singletonList(collabRecord));
 
     RecordMetadata result = repository.get(TEST_ID, Optional.of(collabContext));
 
@@ -248,12 +249,12 @@ class OsmRecordsMetadataRepositoryTest {
   @Test
   void get_shouldHandleNotFoundAndNullRecords() {
     // Not found
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Collections.emptyList());
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Collections.emptyList());
     assertNull(repository.get(TEST_ID, Optional.empty()));
 
     // Filter nulls
     RecordMetadata recordMetadata = createRecordMetadata(TEST_ID);
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Arrays.asList(null, recordMetadata));
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Arrays.asList(null, recordMetadata));
     assertNotNull(repository.get(TEST_ID, Optional.empty()));
   }
 
@@ -402,7 +403,7 @@ class OsmRecordsMetadataRepositoryTest {
     RecordMetadata record2 = createRecordMetadata("id2");
     List<String> ids = Arrays.asList("id1", "id2");
 
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Arrays.asList(record1, record2));
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Arrays.asList(record1, record2));
     Map<String, RecordMetadata> result = repository.get(ids, Optional.empty());
 
     assertEquals(2, result.size());
@@ -415,7 +416,7 @@ class OsmRecordsMetadataRepositoryTest {
     CollaborationContext collabContext = createCollaborationContext();
     String prefixedId = COLLAB_ID + ":" + COLLAB_APP + ":id1";
     RecordMetadata collabRecord = createRecordMetadata(prefixedId);
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Collections.singletonList(collabRecord));
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Collections.singletonList(collabRecord));
 
     Map<String, RecordMetadata> result = repository.get(Collections.singletonList("id1"), Optional.of(collabContext));
 
@@ -430,16 +431,16 @@ class OsmRecordsMetadataRepositoryTest {
     // Empty list
     Map<String, RecordMetadata> result = repository.get(Collections.emptyList(), Optional.empty());
     assertTrue(result.isEmpty());
-    verify(context, never()).getResultsAsList(any());
+    verify(context, never()).getByIds(any(), any(), anyCollection());
 
     // Filter nulls
     RecordMetadata recordMetadata = createRecordMetadata("id1");
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Arrays.asList(recordMetadata, null));
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Arrays.asList(recordMetadata, null));
     result = repository.get(Arrays.asList("id1", "id2"), Optional.empty());
     assertEquals(1, result.size());
 
     // No records found
-    when(context.getResultsAsList(any(GetQuery.class))).thenReturn(Collections.emptyList());
+    when(context.getByIds(eq(RecordMetadata.class), any(), anyCollection())).thenReturn(Collections.emptyList());
     result = repository.get(Arrays.asList("id1", "id2"), Optional.empty());
     assertTrue(result.isEmpty());
   }

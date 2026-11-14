@@ -92,10 +92,11 @@ public class ReplayService implements IReplayService {
             throw new AppException(HttpStatus.SC_BAD_REQUEST,
                     "Validation Error", "Not a valid operation. The valid operations are: " + validReplayOperation);
 
-        if (!(ObjectUtils.isEmpty(replayRequest.getFilter()) || ObjectUtils.isEmpty(replayRequest.getFilter().getKinds())))
-            return this.replay(replayRequest, ReplayType.REPLAY_KIND);
+        // Omit filter (or null) for replay-all; if filter is present, kinds is required (@NotNull).
+        if (ObjectUtils.isEmpty(replayRequest.getFilter()))
+            return this.replay(replayRequest, ReplayType.REPLAY_ALL);
 
-        return this.replay(replayRequest, ReplayType.REPLAY_ALL);
+        return this.replay(replayRequest, ReplayType.REPLAY_KIND);
     }
 
     private ReplayResponse replay(ReplayRequest replayRequest, ReplayType replayOperation) {

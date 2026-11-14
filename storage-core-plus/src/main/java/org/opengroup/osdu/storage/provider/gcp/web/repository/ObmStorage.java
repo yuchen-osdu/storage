@@ -19,8 +19,8 @@ package org.opengroup.osdu.storage.provider.gcp.web.repository;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -391,7 +391,7 @@ public class ObmStorage implements ICloudStorage {
 
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, RECORD_WRITING_ERROR_REASON,
                 "An unexpected error on writing the record has occurred", e);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, RECORD_WRITING_ERROR_REASON,
                 "An unexpected error on writing the record has occurred", e);
         }

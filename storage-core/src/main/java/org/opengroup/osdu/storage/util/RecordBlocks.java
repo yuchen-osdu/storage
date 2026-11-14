@@ -1,7 +1,7 @@
 package org.opengroup.osdu.storage.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
 import org.opengroup.osdu.core.common.model.http.CollaborationContext;
@@ -24,17 +24,22 @@ public class RecordBlocks {
 
     private ICloudStorage cloudStorage;
     private CrcHashGenerator crcHashGenerator;
+    private ObjectMapper objectMapper;
 
     @Autowired
-    public RecordBlocks(ICloudStorage cloudStorage, CrcHashGenerator crcHashGenerator) {
+    public RecordBlocks(
+            ICloudStorage cloudStorage,
+            CrcHashGenerator crcHashGenerator,
+            ObjectMapper objectMapper
+    ) {
         this.cloudStorage = cloudStorage;
         this.crcHashGenerator = crcHashGenerator;
+        this.objectMapper = objectMapper;
     }
 
     @Autowired
     private static final String HASH_KEY_DATA = "data";
     private static final String HASH_KEY_META = "meta";
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     public void populateRecordBlocksMetadata(Map<String, RecordMetadata> existingRecords, List<RecordProcessing> recordsToProcess, Optional<CollaborationContext> collaborationContext) {
 
@@ -43,8 +48,8 @@ public class RecordBlocks {
                 String recordBlocksUpdate = "";
                 String id = CollaborationContextUtil.composeIdWithNamespace(x.getRecordMetadata().getId(), collaborationContext);
                 RecordMetadata previousRecordMetadata = existingRecords.get(id);
-                Map<String, Integer> previousMetadataCompare = populateHashes(previousRecordMetadata);
-                Map<String, Integer> currentMetadataCompare = populateHashes(x.getRecordMetadata());
+                Map<String, Object> previousMetadataCompare = populateMetadataCompare(previousRecordMetadata);
+                Map<String, Object> currentMetadataCompare = populateMetadataCompare(x.getRecordMetadata());
 
                 if (previousRecordMetadata.getHash() == null) {
                     //Fetch recordData from storage for hash and meta comparison
@@ -52,7 +57,7 @@ public class RecordBlocks {
                     RecordData recordData = null;
                     try {
                         recordData = objectMapper.readValue(cloudStorage.read(previousRecordMetadata, previousRecordMetadata.getLatestVersion(), false), RecordData.class);
-                    } catch (JsonProcessingException e) {
+                    } catch (JacksonException e) {
                         throw new RuntimeException(e);
                     }
                     Map<String, String> hash = hashForRecordData(recordData);
@@ -65,8 +70,8 @@ public class RecordBlocks {
                     recordBlocksUpdate = "data";
                 }
 
-                Optional.ofNullable(previousHash.get(HASH_KEY_META)).ifPresent(y -> previousMetadataCompare.put("meta", y.hashCode()));
-                Optional.ofNullable(currentHash.get(HASH_KEY_META)).ifPresent(y -> currentMetadataCompare.put("meta", y.hashCode()));
+                Optional.ofNullable(previousHash.get(HASH_KEY_META)).ifPresent(y -> previousMetadataCompare.put("meta", y));
+                Optional.ofNullable(currentHash.get(HASH_KEY_META)).ifPresent(y -> currentMetadataCompare.put("meta", y));
 
                 recordBlocksUpdate += getRecordBlocksUpdate(previousMetadataCompare, currentMetadataCompare);
                 x.setRecordBlocks(recordBlocksUpdate.trim());
@@ -75,7 +80,7 @@ public class RecordBlocks {
         }
     }
 
-    private static String getRecordBlocksUpdate(Map<String, Integer> previousMetadataCompare, Map<String, Integer> currentMetadataCompare) {
+    private static String getRecordBlocksUpdate(Map<String, Object> previousMetadataCompare, Map<String, Object> currentMetadataCompare) {
         String recordBlocksMetadata = "";
         MapDifference<String, Object> mapDifference = Maps.difference(previousMetadataCompare, currentMetadataCompare);
 
@@ -93,12 +98,12 @@ public class RecordBlocks {
         return recordBlocksMetadata;
     }
 
-    private static Map<String, Integer> populateHashes(RecordMetadata recordMetadata) {
-        Map<String, Integer> map = new HashMap<>();
-        Optional.ofNullable(recordMetadata.getAcl()).ifPresent(y -> map.put("acl", y.hashCode()));
-        Optional.ofNullable(recordMetadata.getLegal()).ifPresent(y -> map.put("legal", y.hashCode()));
-        Optional.ofNullable(recordMetadata.getTags()).ifPresent(y -> map.put("tags", y.hashCode()));
-        Optional.ofNullable(recordMetadata.getAncestry()).ifPresent(y -> map.put("ancestry", y.hashCode()));
+    private static Map<String, Object> populateMetadataCompare(RecordMetadata recordMetadata) {
+        Map<String, Object> map = new HashMap<>();
+        Optional.ofNullable(recordMetadata.getAcl()).ifPresent(y -> map.put("acl", y));
+        Optional.ofNullable(recordMetadata.getLegal()).ifPresent(y -> map.put("legal", y));
+        Optional.ofNullable(recordMetadata.getTags()).ifPresent(y -> map.put("tags", y));
+        Optional.ofNullable(recordMetadata.getAncestry()).ifPresent(y -> map.put("ancestry", y));
         return map;
     }
 

@@ -15,8 +15,9 @@
 package org.opengroup.osdu.storage.service;
 
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisException;
 import org.apache.http.HttpStatus;
 import org.opengroup.osdu.core.common.cache.ICache;
@@ -34,8 +35,6 @@ import org.opengroup.osdu.core.common.util.Crc32c;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import jakarta.xml.bind.DataBindingException;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -203,7 +202,7 @@ public class EntitlementsAndCacheServiceImpl implements IEntitlementsExtensionSe
                 return ERROR_MSG;
             }
             return message.asText();
-        } catch (IOException | DataBindingException e) {
+        } catch (JacksonException e) {
             return ERROR_MSG;
         }
     }

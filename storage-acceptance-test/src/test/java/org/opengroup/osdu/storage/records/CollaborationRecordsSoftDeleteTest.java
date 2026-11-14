@@ -36,7 +36,6 @@ public final class CollaborationRecordsSoftDeleteTest extends BaseRecordsAccepta
   private static final String APPLICATION_NAME =
       "storage service integration test for soft delete";
 
-  private boolean isCollaborationEnabled;
   private String collaboration1Id;
   private String collaboration2Id;
   private String recordId1;
@@ -51,11 +50,6 @@ public final class CollaborationRecordsSoftDeleteTest extends BaseRecordsAccepta
   @Override
   public void setup() throws Exception {
     super.setup();
-    if (!configUtils.getIsCollaborationEnabled()) {
-      isCollaborationEnabled = false;
-      return;
-    }
-    isCollaborationEnabled = true;
     long now = System.currentTimeMillis();
     collaboration1Id = UUID.randomUUID().toString();
     collaboration2Id = UUID.randomUUID().toString();
@@ -88,9 +82,6 @@ public final class CollaborationRecordsSoftDeleteTest extends BaseRecordsAccepta
 
   @AfterEach
   void cleanupCollaborationRecords() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
     storageClient.deleteRecord(recordId1, collaborationHeaders(null, APPLICATION_NAME));
     storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
@@ -102,9 +93,6 @@ public final class CollaborationRecordsSoftDeleteTest extends BaseRecordsAccepta
 
   @Test
   public void should_softDeleteSingleRecordWithinCollaborationContext_when_validRecordIdsAndCollaborationIdAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     HttpResponse<Void> deleteResponse = storageClient.softDeleteRecord(recordId1,
         collaborationHeaders(collaboration1Id, APPLICATION_NAME));
     assertEquals(HttpStatus.SC_NO_CONTENT, deleteResponse.statusCode());
@@ -122,9 +110,6 @@ public final class CollaborationRecordsSoftDeleteTest extends BaseRecordsAccepta
 
   @Test
   public void should_bulkSoftDeleteWithinCollaborationContext_when_validRecordIdsAndCollaborationIdAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var deleteResponse = storageClient.batchDeleteRecords("",
         new String[] {recordId2, recordId3},
         collaborationHeaders(collaboration1Id, APPLICATION_NAME));

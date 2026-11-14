@@ -774,6 +774,7 @@ Based on design decisions, when the Storage service caller is a federated user, 
 - Select the role ``Service Accounts`` > ``Service Account Token Creator``.
 
 ## Using skipdupes
+ACL, legal, tags, and ancestry are compared by value, so different metadata with matching Java hash codes is not treated as a duplicate.
 The skipdupes param is only related to update operations, which means you are calling the API with record IDs already present into the Data Ecosystem. If skipdupes==true, it means the service will not update the record if the payload is the same (duplicates). 
 If there is a difference in the payload, then a new version of the record will be created. On the other hand, skipdupes == false, in an update operation, the service will not check whether the payload is the same or not and will always create a new version, even if identical to a previous version. On the response side, skipedRecordIds are the record IDs which weren't updated (skipped) due skipdupes == true and same payload. 
 In PUT response, there will be no more replication in the record IDs, they will be in either recordIds or skippedRecordIds.
@@ -909,6 +910,8 @@ curl --request GET \
 
 ### Replay 
 This API provides a replay ID that enables tracking of the replay operation's status. It's utilized to initiate the replay operation, which reindexes records according to the request type. Presently, two operation values are accepted: "replay" and "reindex." The replay operation utilizes the default service bus, the "recordtopic," while the reindex operation utilizes the "reindex" topic. Currently replay all or replay of single kind is supported.
+
+**Breaking change:** omit `filter` (or send `null`) to replay all kinds. An empty object `"filter": {}` is no longer treated as replay-all; it returns **400** because `filter.kinds` is required when `filter` is present.
 ```
 POST /api/storage/v2/replay
 

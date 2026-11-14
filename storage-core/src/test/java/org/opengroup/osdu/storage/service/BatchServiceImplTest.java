@@ -3,10 +3,9 @@ package org.opengroup.osdu.storage.service;
 import com.google.common.collect.Sets;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.ToNumberPolicy;
+import org.opengroup.osdu.storage.di.TestJsonMappers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +31,8 @@ import org.opengroup.osdu.core.common.model.storage.RecordMetadata;
 import org.opengroup.osdu.core.common.model.storage.RecordState;
 import org.opengroup.osdu.storage.conversion.DpsConversionService;
 import org.opengroup.osdu.storage.logging.StorageAuditLogger;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersInfo;
+import org.opengroup.osdu.storage.model.MultiRecordHeadersRequest;
 import org.opengroup.osdu.storage.opa.model.ValidationOutputRecord;
 import org.opengroup.osdu.storage.opa.service.IOPAService;
 import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
@@ -50,6 +51,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opengroup.osdu.storage.util.RecordConstants.OPA_FEATURE_NAME;
@@ -90,8 +92,8 @@ class BatchServiceImplTest {
     BatchServiceImpl sut = mock(BatchServiceImpl.class, Mockito.CALLS_REAL_METHODS);
     private static final String ACL_OWNER = "test_acl";
     private static final String TEST_KIND = "test_kind";
-    private static final String TEST_ID_1 = "test_id1";
-    private static final String TEST_ID_2 = "test_id2";
+    private static final String TEST_ID_1 = "tenant1:test:test_id1";
+    private static final String TEST_ID_2 = "tenant1:test:test_id2";
     private static final String INT_NUMBER = "IntegerNumber";
     private static final String[] OWNERS = new String[]{ACL_OWNER};
 
@@ -99,7 +101,7 @@ class BatchServiceImplTest {
     void setUp() throws NoSuchFieldException, IllegalAccessException {
         Field gsonField = BatchServiceImpl.class.getDeclaredField("gson");
         gsonField.setAccessible(true);
-        gsonField.set(sut, new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create());
+        gsonField.set(sut, TestJsonMappers.gson());
     }
 
     @Test
@@ -171,6 +173,33 @@ class BatchServiceImplTest {
         assertTrue(multiRecordInfo.getInvalidRecords().isEmpty());
         assertTrue(multiRecordInfo.getRetryRecords().isEmpty());
         assertEquals("1", multiRecordInfo.getRecords().get(0).getData().get(INT_NUMBER).toString());
+    }
+
+    @Test
+    void getMultipleRecords_preservesNumberRepresentation_whenRecordsContainLargeAndDecimalNumbers() {
+        List<String> recordIds = Arrays.asList(TEST_ID_1);
+        Map<String, RecordMetadata> recordMetadataMap = new HashMap<>();
+        recordMetadataMap.put(TEST_ID_1, buildRecordMetadata(TEST_ID_1));
+
+        when(recordRepository.get(recordIds, Optional.empty())).thenReturn(recordMetadataMap);
+
+        MultiRecordIds multiRecordIds = new MultiRecordIds();
+        multiRecordIds.setRecords(recordIds);
+
+        Map<String, String> recordIdContentMap = new HashMap<>();
+        recordIdContentMap.put(TEST_ID_1, "{\"id\":\"" + TEST_ID_1 + "\",\"kind\":\"" + TEST_KIND + "\","
+                + "\"data\":{\"large\":1000003872,\"largeDecimal\":1234567890123456.50,\"round\":100.0,\"small\":0.0001}}");
+
+        when(cloudStorage.read(any(),any())).thenReturn(recordIdContentMap);
+        when(entitlementsAndCacheService.isDataManager(headers)).thenReturn(true);
+
+        MultiRecordInfo multiRecordInfo = sut.getMultipleRecords(multiRecordIds, Optional.empty());
+
+        Map<String, Object> data = multiRecordInfo.getRecords().get(0).getData();
+        assertEquals("1000003872", new Gson().toJson(data.get("large")));
+        assertEquals("1234567890123456.50", new Gson().toJson(data.get("largeDecimal")));
+        assertEquals("100.0", new Gson().toJson(data.get("round")));
+        assertEquals("0.0001", new Gson().toJson(data.get("small")));
     }
 
     @Test
@@ -333,6 +362,58 @@ class BatchServiceImplTest {
 
         assertTrue(multiRecordResponse.getRecords().isEmpty());
         assertEquals(2, multiRecordResponse.getNotFound().size());
+    }
+
+    @Test
+    void getMultipleRecordsHeaders_returnsInvalidAndNotFound_whenRecordsNotValidOrNotFound() {
+        List<String> recordIds = Arrays.asList("invalid#id", TEST_ID_1, TEST_ID_2);
+        MultiRecordHeadersRequest request = MultiRecordHeadersRequest.builder()
+                .records(recordIds)
+                .attributes(Arrays.asList("kind", "acl"))
+                .build();
+
+        Map<String, RecordMetadata> recordMetadataMap = new HashMap<>();
+        RecordMetadata metadata = buildRecordMetadata(TEST_ID_2);
+        metadata.setStatus(RecordState.purged);
+        recordMetadataMap.put(TEST_ID_2, metadata);
+
+        when(recordRepository.get(anyList(), any(), any())).thenReturn(recordMetadataMap);
+
+        MultiRecordHeadersInfo result = sut.getMultipleRecordsHeaders(request, Optional.empty());
+
+        assertEquals(1, result.getInvalidRecords().size());
+        assertEquals("invalid#id", result.getInvalidRecords().get(0));
+        assertEquals(2, result.getNotFound().size());
+        assertTrue(result.getNotFound().contains(TEST_ID_1));
+        assertTrue(result.getNotFound().contains(TEST_ID_2));
+        assertTrue(result.getRecords().isEmpty());
+    }
+
+    @Test
+    void getMultipleRecordsHeaders_returnsRecords_whenAuthorizedAndValid() {
+        List<String> recordIds = Arrays.asList(TEST_ID_1);
+        MultiRecordHeadersRequest request = MultiRecordHeadersRequest.builder()
+                .records(recordIds)
+                .build();
+
+        Map<String, RecordMetadata> recordMetadataMap = new HashMap<>();
+        RecordMetadata metadata = buildRecordMetadata(TEST_ID_1);
+        metadata.setUser("test-user");
+        metadata.setCreateTime(1600000000000L);
+        recordMetadataMap.put(TEST_ID_1, metadata);
+
+        when(recordRepository.get(anyList(), any(), any())).thenReturn(recordMetadataMap);
+        when(entitlementsAndCacheService.isDataManager(any())).thenReturn(true);
+
+        MultiRecordHeadersInfo result = sut.getMultipleRecordsHeaders(request, Optional.empty());
+
+        assertTrue(result.getInvalidRecords().isEmpty());
+        assertTrue(result.getNotFound().isEmpty());
+        assertEquals(1, result.getRecords().size());
+        assertEquals(TEST_ID_1, result.getRecords().get(0).getId());
+        assertEquals(TEST_KIND, result.getRecords().get(0).getKind());
+        assertEquals("test-user", result.getRecords().get(0).getCreateUser());
+        assertEquals("2020-09-13T12:26:40.000Z", result.getRecords().get(0).getCreateTime());
     }
 
 

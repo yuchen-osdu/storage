@@ -27,9 +27,8 @@ import org.opengroup.osdu.core.common.model.storage.StorageRole;
 import org.opengroup.osdu.storage.model.PatchRecordsRequestModel;
 import org.opengroup.osdu.storage.model.RecordQueryPatch;
 import org.opengroup.osdu.storage.response.PatchRecordsResponse;
-import org.opengroup.osdu.storage.util.RecordConstants;
 import org.opengroup.osdu.storage.validation.ValidationDoc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.ResultActions;
@@ -60,7 +59,6 @@ public class PatchApiControllerTest extends ApiTest<PatchRecordsRequestModel> {
         lenient().when(dpsHeaders.getUserEmail()).thenReturn("a@b");
         lenient().when(dpsHeaders.getPartitionId()).thenReturn("opendes");
         lenient().when(dpsHeaders.getAuthorization()).thenReturn("auth");
-        lenient().when(collaborationFeatureFlag.isFeatureEnabled(RecordConstants.COLLABORATIONS_FEATURE_NAME)).thenReturn(false);
     }
 
     @Test

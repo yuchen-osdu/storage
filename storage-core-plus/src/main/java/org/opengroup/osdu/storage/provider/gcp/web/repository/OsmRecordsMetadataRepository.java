@@ -20,7 +20,6 @@ package org.opengroup.osdu.storage.provider.gcp.web.repository;
 import static org.opengroup.osdu.core.osm.core.model.where.condition.And.and;
 import static org.opengroup.osdu.core.osm.core.model.where.predicate.Eq.eq;
 import static org.opengroup.osdu.core.osm.core.model.where.predicate.Ge.ge;
-import static org.opengroup.osdu.core.osm.core.model.where.predicate.In.in;
 import static org.springframework.beans.factory.config.BeanDefinition.SCOPE_SINGLETON;
 
 import com.github.fge.jsonpatch.JsonPatch;
@@ -153,8 +152,7 @@ public class OsmRecordsMetadataRepository implements IRecordsMetadataRepository<
   public RecordMetadata get(String id, Optional<CollaborationContext> collaborationContext) {
     validateOriginalId(id, collaborationContext);
     String lookupId = CollaborationContextUtil.composeIdWithNamespace(id, collaborationContext);
-    GetQuery<RecordMetadata> osmQuery = new GetQuery<>(RecordMetadata.class, getDestination(), eq("id", lookupId));
-    return context.getResultsAsList(osmQuery).stream()
+    return context.getByIds(RecordMetadata.class, getDestination(), List.of(lookupId)).stream()
         .filter(Objects::nonNull)
         .findFirst()
         .map(record -> restoreOriginalId(record, collaborationContext))
@@ -235,12 +233,7 @@ public class OsmRecordsMetadataRepository implements IRecordsMetadataRepository<
     List<String> lookupIds = ids.stream()
         .map(id -> CollaborationContextUtil.composeIdWithNamespace(id, collaborationContext))
         .collect(Collectors.toList());
-    GetQuery<RecordMetadata> recordsMetadataInQuery = new GetQuery<>(
-        RecordMetadata.class,
-        getDestination(),
-        in("id", lookupIds)
-    );
-    List<RecordMetadata> resultsAsList = context.getResultsAsList(recordsMetadataInQuery);
+    List<RecordMetadata> resultsAsList = context.getByIds(RecordMetadata.class, getDestination(), lookupIds);
 
     // Return map with composed IDs as keys, RecordMetadata objects keep original IDs restored
     Map<String, RecordMetadata> result = new HashMap<>();

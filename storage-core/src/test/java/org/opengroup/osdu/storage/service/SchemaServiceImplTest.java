@@ -22,7 +22,6 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.opengroup.osdu.core.common.cache.ICache;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
 import org.opengroup.osdu.core.common.model.indexer.OperationType;
@@ -66,8 +65,6 @@ public class SchemaServiceImplTest {
     @Mock
     private StorageAuditLogger auditLogger;
 
-    @Mock
-    private IFeatureFlag collaborationFeatureFlag;
 
     @InjectMocks
     private SchemaServiceImpl sut;

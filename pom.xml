@@ -18,7 +18,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.opengroup.osdu</groupId>
     <artifactId>os-storage</artifactId>
-    <version>0.30.0-SNAPSHOT</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
     <description>Root Storage Service project</description>
 
@@ -31,28 +31,40 @@
     </licenses>
 
     <properties>
-      <maven.compiler.release>17</maven.compiler.release>
+      <revision>0.31.0-SNAPSHOT</revision>
+      <maven.compiler.release>25</maven.compiler.release>
       <docker.image.prefix>opendes</docker.image.prefix>
       <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
       <!-- OSDU Versions-->
-      <os-core-common.version>7.1.0</os-core-common.version>
+      <os-core-common.version>10.0.0</os-core-common.version>
 
       <!-- Spring Versions-->
-      <spring-boot.version>3.5.14</spring-boot.version>
-      <spring-security.version>6.5.10</spring-security.version>
-      <spring-framework.version>6.2.18</spring-framework.version>
+      <spring-boot.version>4.0.9</spring-boot.version>
+      <spring-security.version>7.0.7</spring-security.version>
+      <spring-framework.version>7.0.10</spring-framework.version>
+      <jackson2.version>2.21.8</jackson2.version>
+      <jackson3.version>3.1.8</jackson3.version>
 
       <!-- Project Versions-->
       <json-smart.version>2.6.0</json-smart.version>
-      <openapi.version>2.8.16</openapi.version>
-      <swagger-core.version>2.2.45</swagger-core.version>
+      <openapi.version>3.0.3</openapi.version>
+      <swagger-core.version>2.2.47</swagger-core.version>
       <lombok.version>1.18.42</lombok.version>
-      <!-- lettuce-core 7.x requires Netty 4.2+; Spring Boot 3.5.14 provides 4.1.x -->
-      <netty.version>4.2.14.Final</netty.version>
+      <mockito.version>5.23.0</mockito.version>
+      <!-- Empty placeholder so Surefire can late-replace @{argLine} (e.g. Jacoco); without it the literal @{argLine} is passed to the JVM and tests fail to start. -->
+      <argLine></argLine>
+      <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+      <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
+      <guava.version>33.7.2-jre</guava.version>
+      <logback.version>1.6.5</logback.version>
+      <!-- lettuce-core 7.x requires Netty 4.2+ -->
+      <netty.version>4.2.19.Final</netty.version>
       <commons-codec.version>1.17.1</commons-codec.version>
-      <!-- os-core-common 7.0.0 declares lettuce-core as provided; CVE-2025-58057 requires >= 7.5.2.RELEASE -->
+      <!-- os-core-common declares lettuce-core as provided; CVE-2025-58057 requires >= 7.5.2.RELEASE -->
       <lettuce.version>7.5.2.RELEASE</lettuce.version>
+      <!-- Patched Tomcat 11 line -->
+      <tomcat.version>11.0.27</tomcat.version>
 
       <!-- Plugin Versions -->
       <spring-boot-maven-plugin.version>${spring-boot.version}</spring-boot-maven-plugin.version>
@@ -61,8 +73,9 @@
 
     <dependencyManagement>
       <!-- BOMs listed in import-order precedence (Maven's "first declared wins" rule for BOMs):
-        netty-bom first so it overrides Spring Boot's Netty 4.1.x with the 4.2.x line lettuce-core 7.5.2 requires (CVE-2025-58057 et al),
-        spring-boot-dependencies second as the parent BOM providing default dependency management,
+        netty-bom first so it overrides Spring Boot's Netty version with the patched 4.2.x line lettuce-core 7.5.2 requires,
+        patched Jackson 2 and Jackson 3 BOMs before Spring Boot to override its older defaults,
+        spring-boot-dependencies next as the parent BOM providing default dependency management,
         spring-security-bom third as it may need to override Spring Framework versions for security purposes,
         spring-framework-bom fourth as it provides core dependencies that can be safely overridden by the security BOM,
         os-core-common last as it provides the default dependencies for the project.
@@ -76,6 +89,20 @@
             <version>${netty.version}</version>
             <type>pom</type>
             <scope>import</scope>
+        </dependency>
+        <dependency>
+          <groupId>com.fasterxml.jackson</groupId>
+          <artifactId>jackson-bom</artifactId>
+          <version>${jackson2.version}</version>
+          <type>pom</type>
+          <scope>import</scope>
+        </dependency>
+        <dependency>
+          <groupId>tools.jackson</groupId>
+          <artifactId>jackson-bom</artifactId>
+          <version>${jackson3.version}</version>
+          <type>pom</type>
+          <scope>import</scope>
         </dependency>
         <dependency>
           <groupId>org.springframework.boot</groupId>
@@ -140,6 +167,48 @@
             <artifactId>lettuce-core</artifactId>
             <version>${lettuce.version}</version>
         </dependency>
+        <!-- Guava CVE-2026-102554 and logback CVE-2026-104721 (Boot 4.0.9 still manages logback 1.5.x) -->
+        <dependency>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+          <version>${guava.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>ch.qos.logback</groupId>
+          <artifactId>logback-classic</artifactId>
+          <version>${logback.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>ch.qos.logback</groupId>
+          <artifactId>logback-core</artifactId>
+          <version>${logback.version}</version>
+        </dependency>
+        <!-- Override Spring Boot's Tomcat embed line with the patched 11.0.x release -->
+        <dependency>
+          <groupId>org.apache.tomcat.embed</groupId>
+          <artifactId>tomcat-embed-core</artifactId>
+          <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tomcat.embed</groupId>
+          <artifactId>tomcat-embed-el</artifactId>
+          <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tomcat.embed</groupId>
+          <artifactId>tomcat-embed-websocket</artifactId>
+          <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tomcat.embed</groupId>
+          <artifactId>tomcat-embed-jasper</artifactId>
+          <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tomcat</groupId>
+          <artifactId>tomcat-annotations-api</artifactId>
+          <version>${tomcat.version}</version>
+        </dependency>
       </dependencies>
     </dependencyManagement>
 
@@ -183,7 +252,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-compiler-plugin</artifactId>
-            <version>3.12.1</version>
+            <version>3.15.0</version>
             <configuration>
               <parameters>true</parameters>
               <annotationProcessorPaths>
@@ -206,7 +275,7 @@
             <dependency>
               <groupId>org.opengroup.osdu</groupId>
               <artifactId>osdu-enforcer-rules</artifactId>
-              <version>1.0.1</version>
+              <version>2.0.3</version>
             </dependency>
           </dependencies>
           <executions>
@@ -222,14 +291,31 @@
                     <version>[3.6.3,)</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>[17,)</version>
+                    <version>[25,)</version>
                   </requireJavaVersion>
                   <banDuplicatePomDependencyVersions/>
+                  <reactorModuleConvergence/>
                   <requireSameVersions>
                     <plugins>
                       <plugin>org.apache.maven.plugins:maven-compiler-plugin</plugin>
                     </plugins>
                   </requireSameVersions>
+                  <requireSameVersions>
+                    <plugins>
+                      <plugin>org.apache.maven.plugins:maven-surefire-plugin</plugin>
+                      <plugin>org.apache.maven.plugins:maven-failsafe-plugin</plugin>
+                      <plugin>org.apache.maven.plugins:maven-surefire-report-plugin</plugin>
+                    </plugins>
+                  </requireSameVersions>
+                  <requireReleaseDeps>
+                    <message>No Snapshots Allowed!</message>
+                    <excludes>
+                      <!-- Reactor / parent (version is 0.31.0-SNAPSHOT until release). -->
+                      <exclude>org.opengroup.osdu:os-storage</exclude>
+                      <exclude>org.opengroup.osdu:storage-core</exclude>
+                      <exclude>org.opengroup.osdu:storage-core-plus</exclude>
+                    </excludes>
+                  </requireReleaseDeps>
                 </rules>
               </configuration>
             </execution>
@@ -279,6 +365,31 @@
               </generateGitPropertiesFilename>
             </configuration>
         </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>flatten-maven-plugin</artifactId>
+          <version>1.8.0</version>
+          <configuration>
+            <updatePomFile>true</updatePomFile>
+            <flattenMode>resolveCiFriendliesOnly</flattenMode>
+          </configuration>
+          <executions>
+            <execution>
+              <id>flatten</id>
+              <phase>process-resources</phase>
+              <goals>
+                <goal>flatten</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>flatten.clean</id>
+              <phase>clean</phase>
+              <goals>
+                <goal>clean</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
       </plugins>
     </build>
 
@@ -309,30 +420,6 @@
         <modules>
           <module>storage-core</module>
           <module>storage-core-plus</module>
-        </modules>
-      </profile>
-      <profile>
-        <id>aws</id>
-        <modules>
-          <module>provider/storage-aws</module>
-        </modules>
-      </profile>
-      <profile>
-        <id>azure</id>
-        <modules>
-          <module>provider/storage-azure</module>
-        </modules>
-      </profile>
-      <profile>
-        <id>ibm</id>
-        <modules>
-          <module>provider/storage-ibm</module>
-        </modules>
-      </profile>
-      <profile>
-        <id>gc</id>
-        <modules>
-          <module>provider/storage-gc</module>
         </modules>
       </profile>
     </profiles>

@@ -14,13 +14,12 @@
 
 package org.opengroup.osdu.storage.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.opengroup.osdu.core.common.cache.ICache;
 import org.opengroup.osdu.core.common.entitlements.IEntitlementsFactory;
 import org.opengroup.osdu.core.common.entitlements.IEntitlementsService;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.http.CollaborationContextFactory;
 import org.opengroup.osdu.core.common.model.entitlements.EntitlementsException;
 import org.opengroup.osdu.core.common.model.entitlements.GroupInfo;
@@ -33,7 +32,7 @@ import org.opengroup.osdu.storage.policy.service.PartitionPolicyStatusService;
 import org.opengroup.osdu.storage.service.*;
 import org.opengroup.osdu.storage.util.RecordBlocks;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -45,67 +44,64 @@ import java.util.Collections;
 import static org.mockito.Mockito.lenient;
 
 public abstract class ApiTest<T> {
-    @MockBean
+    @MockitoBean
     protected ICache cache;
 
-    @MockBean
+    @MockitoBean
     protected IEntitlementsFactory iEntitlementsFactory;
 
-    @MockBean
+    @MockitoBean
     protected CrsConversionService crsConversionService;
 
-    @MockBean
+    @MockitoBean
     protected BatchService batchService;
 
-    @MockBean
+    @MockitoBean
     protected ReadAuditLogsConsumer readAuditLogsConsumer;
 
-    @MockBean
+    @MockitoBean
     protected PartitionPolicyStatusService partitionPolicyStatusService;
 
-    @MockBean
+    @MockitoBean
     protected BulkUpdateRecordServiceImpl bulkUpdateRecordService;
 
-    @MockBean
+    @MockitoBean
     protected DataAuthorizationService dataAuthorizationService;
 
-    @MockBean
+    @MockitoBean
     protected IngestionServiceImpl ingestionService;
 
-    @MockBean
+    @MockitoBean
     protected LegalServiceImpl legalService;
 
-    @MockBean
+    @MockitoBean
     protected PartitionServiceImpl partitionService;
 
-    @MockBean
+    @MockitoBean
     protected PatchRecordsServiceImpl patchRecordsService;
 
-    @MockBean
+    @MockitoBean
     protected PersistenceServiceImpl persistenceService;
 
-    @MockBean
+    @MockitoBean
     protected QueryServiceImpl queryService;
 
-    @MockBean
+    @MockitoBean
     protected RecordServiceImpl recordService;
 
-    @MockBean
+    @MockitoBean
     protected SchemaServiceImpl schemaService;
 
-    @MockBean
+    @MockitoBean
     protected RecordBlocks recordBlocks;
 
-    @MockBean
-    protected IFeatureFlag collaborationFeatureFlag;
-
-    @MockBean
+    @MockitoBean
     protected ITenantInfoService tenantInfoService;
 
-    @MockBean
+    @MockitoBean
     protected DpsHeaders dpsHeaders;
 
-    @MockBean
+    @MockitoBean
     private CollaborationContextFactory collaborationContextFactory;
 
     @Autowired

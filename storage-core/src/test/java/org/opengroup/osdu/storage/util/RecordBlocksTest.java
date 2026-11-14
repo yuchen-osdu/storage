@@ -3,6 +3,8 @@ package org.opengroup.osdu.storage.util;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import tools.jackson.databind.ObjectMapper;
+import org.opengroup.osdu.storage.di.TestJsonMappers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +26,7 @@ import org.opengroup.osdu.storage.provider.interfaces.ICloudStorage;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +37,9 @@ public class RecordBlocksTest {
 
     @Spy
     CrcHashGenerator crcHashGenerator;
+
+    @Spy
+    ObjectMapper objectMapper = TestJsonMappers.objectMapper();
 
     @InjectMocks
     private RecordBlocks recordBlocks;
@@ -133,6 +139,197 @@ public class RecordBlocksTest {
         Mockito.when(cloudStorage.read(any(), anyLong(), anyBoolean())).thenReturn(new Gson().toJson(this.record1));
         recordBlocks.populateRecordBlocksMetadata(existingRecord, recordsToProcess, Optional.empty());
         assertEquals("", recordsToProcess.get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksDetectsAclChangeWhenAclHashCodeCollides() {
+        // "Aa" and "BB" have the same String.hashCode(), so both ACLs have the same Acl.hashCode()
+        Acl existingAcl = new Acl(new String[]{"data.Aa.viewers@tenant1.gmail.com"}, VALID_ACL);
+        Acl newAcl = new Acl(new String[]{"data.BB.viewers@tenant1.gmail.com"}, VALID_ACL);
+        assertEquals(existingAcl.hashCode(), newAcl.hashCode());
+
+        List<RecordProcessing> recordsToProcess = populateRecordBlocksForAclUpdate(existingAcl, newAcl);
+
+        assertEquals("metadata", recordsToProcess.get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksEmptyWhenAclValuesUnchanged() {
+        Acl existingAcl = new Acl(new String[]{"data.Aa.viewers@tenant1.gmail.com"}, VALID_ACL);
+        Acl newAcl = new Acl(new String[]{"data.Aa.viewers@tenant1.gmail.com"}, VALID_ACL);
+
+        List<RecordProcessing> recordsToProcess = populateRecordBlocksForAclUpdate(existingAcl, newAcl);
+
+        assertEquals("", recordsToProcess.get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksWhenAclAdded() {
+        Acl newAcl = new Acl(VALID_ACL, VALID_ACL);
+
+        assertEquals("metadata+", populateRecordBlocksForAclUpdate(null, newAcl).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksWhenAclRemoved() {
+        Acl existingAcl = new Acl(VALID_ACL, VALID_ACL);
+
+        assertEquals("metadata-", populateRecordBlocksForAclUpdate(existingAcl, null).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksEmptyWhenAclAbsent() {
+        assertEquals("", populateRecordBlocksForAclUpdate(null, null).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksWhenDataAndAclChange() {
+        Map<String, Object> existingData = new HashMap<>();
+        existingData.put("country", "USA");
+        RecordData existingRecordData = new RecordData();
+        existingRecordData.setData(existingData);
+        Map<String, Object> newData = new HashMap<>();
+        newData.put("country", "CAN");
+        RecordData newRecordData = new RecordData();
+        newRecordData.setData(newData);
+
+        RecordMetadata existingMetadata = new RecordMetadata();
+        existingMetadata.setAcl(new Acl(new String[]{"data.Aa.viewers@tenant1.gmail.com"}, VALID_ACL));
+        existingMetadata.setHash(recordBlocks.hashForRecordData(existingRecordData));
+        RecordMetadata newMetadata = new RecordMetadata();
+        newMetadata.setAcl(new Acl(new String[]{"data.BB.viewers@tenant1.gmail.com"}, VALID_ACL));
+        newMetadata.setHash(recordBlocks.hashForRecordData(newRecordData));
+
+        assertEquals("data metadata", populateRecordBlocksForMetadataUpdate(existingMetadata, newMetadata).get(0).getRecordBlocks());
+    }
+
+    private List<RecordProcessing> populateRecordBlocksForAclUpdate(Acl existingAcl, Acl newAcl) {
+        RecordMetadata existingRecordMetadata = new RecordMetadata();
+        existingRecordMetadata.setAcl(existingAcl);
+        RecordMetadata newRecordMetadata = new RecordMetadata();
+        newRecordMetadata.setAcl(newAcl);
+        return populateRecordBlocksForMetadataUpdate(existingRecordMetadata, newRecordMetadata);
+    }
+
+    @Test
+    public void populateRecordBlocksDetectsLegalChangeWhenHashCodeCollides() {
+        Legal existingLegal = new Legal();
+        existingLegal.setLegaltags(Sets.newHashSet("legal-Aa"));
+        Legal newLegal = new Legal();
+        newLegal.setLegaltags(Sets.newHashSet("legal-BB"));
+        assertNotEquals(existingLegal, newLegal);
+        assertEquals(existingLegal.hashCode(), newLegal.hashCode());
+
+        RecordMetadata existingMetadata = new RecordMetadata();
+        existingMetadata.setLegal(existingLegal);
+        RecordMetadata newMetadata = new RecordMetadata();
+        newMetadata.setLegal(newLegal);
+
+        assertEquals("metadata", populateRecordBlocksForMetadataUpdate(existingMetadata, newMetadata).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksDetectsTagsChangeWhenHashCodeCollides() {
+        Map<String, String> existingTags = new HashMap<>();
+        existingTags.put("tag", "Aa");
+        Map<String, String> newTags = new HashMap<>();
+        newTags.put("tag", "BB");
+        assertNotEquals(existingTags, newTags);
+        assertEquals(existingTags.hashCode(), newTags.hashCode());
+
+        RecordMetadata existingMetadata = new RecordMetadata();
+        existingMetadata.setTags(existingTags);
+        RecordMetadata newMetadata = new RecordMetadata();
+        newMetadata.setTags(newTags);
+
+        assertEquals("metadata", populateRecordBlocksForMetadataUpdate(existingMetadata, newMetadata).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksDetectsAncestryChangeWhenHashCodeCollides() {
+        RecordAncestry existingAncestry = new RecordAncestry();
+        existingAncestry.setParents(Sets.newHashSet("tenant1:kind:Aa:1"));
+        RecordAncestry newAncestry = new RecordAncestry();
+        newAncestry.setParents(Sets.newHashSet("tenant1:kind:BB:1"));
+        assertNotEquals(existingAncestry, newAncestry);
+        assertEquals(existingAncestry.hashCode(), newAncestry.hashCode());
+
+        RecordMetadata existingMetadata = new RecordMetadata();
+        existingMetadata.setAncestry(existingAncestry);
+        RecordMetadata newMetadata = new RecordMetadata();
+        newMetadata.setAncestry(newAncestry);
+
+        assertEquals("metadata", populateRecordBlocksForMetadataUpdate(existingMetadata, newMetadata).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksEmptyWhenMetadataValuesUnchanged() {
+        Legal existingLegal = new Legal();
+        existingLegal.setLegaltags(Sets.newHashSet("legal1", "legal2"));
+        Legal newLegal = new Legal();
+        newLegal.setLegaltags(Sets.newHashSet("legal2", "legal1"));
+        RecordAncestry existingAncestry = new RecordAncestry();
+        existingAncestry.setParents(Sets.newHashSet("tenant1:kind:parent:1"));
+        RecordAncestry newAncestry = new RecordAncestry();
+        newAncestry.setParents(Sets.newHashSet("tenant1:kind:parent:1"));
+
+        RecordMetadata existingMetadata = new RecordMetadata();
+        existingMetadata.setLegal(existingLegal);
+        existingMetadata.setAncestry(existingAncestry);
+        existingMetadata.setTags(new HashMap<>(Collections.singletonMap("tag", "value")));
+        RecordMetadata newMetadata = new RecordMetadata();
+        newMetadata.setLegal(newLegal);
+        newMetadata.setAncestry(newAncestry);
+        newMetadata.setTags(new HashMap<>(Collections.singletonMap("tag", "value")));
+
+        assertEquals("", populateRecordBlocksForMetadataUpdate(existingMetadata, newMetadata).get(0).getRecordBlocks());
+    }
+
+    @Test
+    public void populateRecordBlocksDetectsMetaChangeWhenCrcStringHashCodeCollides() {
+        String existingMetaHash = "AaAAAA==";
+        String newMetaHash = "BBAAAA==";
+        assertNotEquals(existingMetaHash, newMetaHash);
+        assertEquals(existingMetaHash.hashCode(), newMetaHash.hashCode());
+
+        RecordMetadata existingMetadata = new RecordMetadata();
+        existingMetadata.setHash(Collections.singletonMap("meta", existingMetaHash));
+        RecordMetadata newMetadata = new RecordMetadata();
+        newMetadata.setHash(Collections.singletonMap("meta", newMetaHash));
+
+        assertEquals("metadata", populateRecordBlocksForMetadataUpdate(existingMetadata, newMetadata).get(0).getRecordBlocks());
+    }
+
+    private List<RecordProcessing> populateRecordBlocksForMetadataUpdate(RecordMetadata existingRecordMetadata, RecordMetadata newRecordMetadata) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("country", "USA");
+        RecordData recordData = new RecordData();
+        recordData.setData(data);
+
+        existingRecordMetadata.setKind(KIND_1);
+        existingRecordMetadata.setId(RECORD_ID1);
+        if (existingRecordMetadata.getHash() == null) {
+            existingRecordMetadata.setHash(recordBlocks.hashForRecordData(recordData));
+        }
+
+        newRecordMetadata.setKind(KIND_1);
+        newRecordMetadata.setId(RECORD_ID1);
+        if (newRecordMetadata.getHash() == null) {
+            newRecordMetadata.setHash(recordBlocks.hashForRecordData(recordData));
+        }
+
+        Map<String, RecordMetadata> existingRecord = new HashMap<>();
+        existingRecord.put(RECORD_ID1, existingRecordMetadata);
+
+        RecordProcessing recordProcessing = new RecordProcessing();
+        recordProcessing.setRecordMetadata(newRecordMetadata);
+        recordProcessing.setRecordData(recordData);
+        recordProcessing.setOperationType(OperationType.update);
+        List<RecordProcessing> recordsToProcess = new ArrayList<>();
+        recordsToProcess.add(recordProcessing);
+
+        recordBlocks.populateRecordBlocksMetadata(existingRecord, recordsToProcess, Optional.empty());
+        return recordsToProcess;
     }
 
 

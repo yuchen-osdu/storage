@@ -7,7 +7,6 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
 data:
   CRS_CONVERTER_HOST: {{ .Values.data.crsConverterHost | quote }}
-  COLLABORATIONS_ENABLED: {{ .Values.data.collaborationsEnabled | quote }}
   DEFAULT_DATA_COUNTRY: {{ .Values.data.defaultDataCountry | quote }}
   ENTITLEMENTS_HOST: {{ .Values.data.entitlementsHost | quote }}
   LEGAL_HOST: {{ .Values.data.legalHost | quote }}

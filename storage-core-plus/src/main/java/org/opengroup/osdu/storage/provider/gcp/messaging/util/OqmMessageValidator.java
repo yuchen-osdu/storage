@@ -17,8 +17,8 @@
 
 package org.opengroup.osdu.storage.provider.gcp.messaging.util;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import java.util.Objects;
 import lombok.experimental.UtilityClass;

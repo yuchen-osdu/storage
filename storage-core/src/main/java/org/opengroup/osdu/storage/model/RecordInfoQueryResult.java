@@ -14,7 +14,7 @@ import java.util.List;
 @Schema(description = "Paginated query result containing a cursor and a list of results.")
 public class RecordInfoQueryResult <T> {
 
-    @Schema(description = "Cursor for fetching the next page of results. Null when there are no more results.")
+    @Schema(description = "Cursor for fetching the next page of results. Null when there are no more results.", nullable = true)
     private String cursor;
 
     @Schema(description = "List of results for the current page.")
