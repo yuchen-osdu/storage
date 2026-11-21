@@ -15,7 +15,7 @@
 package org.opengroup.osdu.storage.service;
 
 import com.google.common.base.Strings;
-import io.jsonwebtoken.lang.Collections;
+import org.springframework.util.CollectionUtils;
 import org.apache.http.HttpStatus;
 import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.legal.ILegalService;
@@ -360,7 +360,7 @@ public class IngestionServiceImpl implements IngestionService {
 	private List<String> getRecordIds(List<Record> records, Map<String, List<RecordIdWithVersion>> recordParentMap) {
 		List<String> ids = new ArrayList<>();
 		for (Record record : records) {
-			if (record.getAncestry() != null && !Collections.isEmpty(record.getAncestry().getParents())) {
+			if (record.getAncestry() != null && !CollectionUtils.isEmpty(record.getAncestry().getParents())) {
 
 				List<RecordIdWithVersion> parents = new ArrayList<>();
 

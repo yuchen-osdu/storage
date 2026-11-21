@@ -147,6 +147,59 @@ class CopyRecordReferencesServiceTest {
         });
   }
 
+  @Test
+  void should_throwHttp400_when_collaboration_header_present_but_empty() {
+    CopyRecordReferencesModel request = getCopyRecordReferencesModel(NAMESPACE);
+
+    assertThatThrownBy(() ->
+        service.copyRecordReferences(request, ""))
+        .isInstanceOf(AppException.class)
+        .satisfies(e -> {
+          AppException appException = (AppException) e;
+          assertEquals(400, appException.getError().getCode());
+          assertEquals("Validation error.", appException.getError().getReason());
+          assertEquals("Missing 'application' property in x-collaboration header.",
+              appException.getError().getMessage());
+        });
+  }
+
+  @Test
+  void should_throwHttp400_when_collaboration_header_is_malformed() {
+    CopyRecordReferencesModel request = getCopyRecordReferencesModel(NAMESPACE);
+
+    assertThatThrownBy(() ->
+        service.copyRecordReferences(request, "0"))
+        .isInstanceOf(AppException.class)
+        .satisfies(e -> {
+          AppException appException = (AppException) e;
+          assertEquals(400, appException.getError().getCode());
+          assertEquals("Validation error.", appException.getError().getReason());
+          assertEquals(
+              "all directives must have non-empty <key>=<value> format",
+              appException.getError().getMessage());
+        });
+  }
+
+  @Test
+  void should_throwHttp400_when_collaboration_header_missing_application() {
+    CopyRecordReferencesModel request = getCopyRecordReferencesModel(NAMESPACE);
+    String collaborationDirectiveMissingApplication = String.format("id=%s", NAMESPACE);
+
+    when(collaborationContextFactory.create(collaborationDirectiveMissingApplication)).thenReturn(
+        getCollaborationContext());
+
+    assertThatThrownBy(() ->
+        service.copyRecordReferences(request, collaborationDirectiveMissingApplication))
+        .isInstanceOf(AppException.class)
+        .satisfies(e -> {
+          AppException appException = (AppException) e;
+          assertEquals(400, appException.getError().getCode());
+          assertEquals("Validation error.", appException.getError().getReason());
+          assertEquals("Missing 'application' property in x-collaboration header.",
+              appException.getError().getMessage());
+        });
+  }
+
   private CopyRecordReferencesModel getCopyRecordReferencesModel(String target) {
     RecordVersionModel recordVersionModel = RecordVersionModel.builder().id(ID).build();
     return CopyRecordReferencesModel.builder()

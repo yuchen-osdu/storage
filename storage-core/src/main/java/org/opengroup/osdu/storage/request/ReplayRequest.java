@@ -37,6 +37,7 @@ public class ReplayRequest {
     private String operation;
 
     @Valid
-    @Schema(description = "Optional filter to restrict the replay to specific kinds.")
+    @Schema(description = "Optional filter to restrict the replay to specific kinds. "
+            + "Omit or null for replay-all. If present, kinds is required (empty filter object returns 400).")
     private ReplayFilter filter;
 }

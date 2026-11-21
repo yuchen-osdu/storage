@@ -13,7 +13,7 @@ public class EncodeDecode {
 
     public String deserializeCursor(String cursor) {
         if(StringUtils.isEmpty(cursor)) {
-            return cursor;
+            return null;
         }
         try {
             return new String(Base64.getDecoder().decode(cursor));

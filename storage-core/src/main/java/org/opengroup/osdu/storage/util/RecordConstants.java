@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class RecordConstants {
-    public static final String COLLABORATIONS_FEATURE_NAME = "collaborations-enabled";
     public static final String KIND_PATH = "/kind";
     public static final String TAGS_PATH = "/tags";
     public static final String REGEX_TAGS_PATH_FOR_ADD_OR_REMOVE_SINGLE_KEY_VALUE = TAGS_PATH.concat("/.+");

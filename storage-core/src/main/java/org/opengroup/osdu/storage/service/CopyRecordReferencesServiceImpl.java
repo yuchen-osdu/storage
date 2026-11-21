@@ -16,8 +16,10 @@
 
 package org.opengroup.osdu.storage.service;
 
-import static org.opengroup.osdu.core.common.util.CollaborationContextUtil.getCollaborationDirectiveProperties;
+import static org.opengroup.osdu.core.common.model.collaboration.validation.CollaborationContextValidationDoc.DIRECTIVE_FORMAT;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +32,7 @@ import org.opengroup.osdu.core.common.model.storage.MultiRecordInfo;
 import org.opengroup.osdu.core.common.model.storage.Record;
 import org.opengroup.osdu.storage.model.CopyRecordReferencesModel;
 import org.opengroup.osdu.storage.model.RecordVersionModel;
+import org.opengroup.osdu.storage.util.CollaborationContextHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -39,6 +42,7 @@ import org.springframework.util.StringUtils;
 public class CopyRecordReferencesServiceImpl implements CopyRecordReferencesService {
 
   private static final String ID = "id";
+  private static final String APPLICATION = "application";
 
   @Autowired
   private BatchService batchService;
@@ -50,8 +54,11 @@ public class CopyRecordReferencesServiceImpl implements CopyRecordReferencesServ
   @Override
   public CopyRecordReferencesModel copyRecordReferences(CopyRecordReferencesModel request,
       String collaborationDirectives) {
-    Map<String, String> collaborationHeader = getCollaborationDirectiveProperties(
-        collaborationDirectives);
+    if (CollectionUtils.isEmpty(request.getRecords())) {
+      throw new AppException(HttpStatus.SC_BAD_REQUEST, "Validation error.",
+          "The list of record IDs cannot be empty");
+    }
+    Map<String, String> collaborationHeader = parseCollaborationHeader(collaborationDirectives);
     if (!collaborationHeader.containsKey(ID) && !StringUtils.hasLength(
         request.getTarget())) {
       throw new AppException(HttpStatus.SC_CONFLICT, "Can't copy from SOR to SOR",
@@ -60,11 +67,42 @@ public class CopyRecordReferencesServiceImpl implements CopyRecordReferencesServ
     Optional<CollaborationContext> collaborationContextHeader = getCollaborationContext(
         collaborationHeader, collaborationDirectives);
     Optional<CollaborationContext> collaborationContextBody = getCollaborationContext(request);
+    if (!collaborationHeader.containsKey(APPLICATION)) {
+      throw new AppException(HttpStatus.SC_BAD_REQUEST, "Validation error.",
+          "Missing 'application' property in x-collaboration header.");
+    }
     List<Record> records = getValidRecords(request, collaborationContextHeader,
         collaborationContextBody);
-    ingestionService.createUpdateRecords(false, records, collaborationHeader.get("application"),
+    ingestionService.createUpdateRecords(false, records, collaborationHeader.get(APPLICATION),
         collaborationContextBody);
     return request;
+  }
+
+  /**
+   * Parses {@code x-collaboration} without requiring {@code @ValidateCollaborationContext}
+   * (copy allows SOR {@code application=}-only headers). Malformed values such as {@code "0"}
+   * must not reach {@link org.opengroup.osdu.core.common.util.CollaborationContextUtil}'s
+   * unchecked {@code keyValue[1]} access (ArrayIndexOutOfBoundsException → 500).
+   */
+  private Map<String, String> parseCollaborationHeader(String collaborationDirectives) {
+    if (!StringUtils.hasLength(collaborationDirectives)) {
+      return Collections.emptyMap();
+    }
+
+    Map<String, String> properties = new HashMap<>();
+    for (String directive : collaborationDirectives.split(",")) {
+      int separator = directive.indexOf('=');
+      if (separator <= 0 || separator == directive.length() - 1) {
+        throw new AppException(HttpStatus.SC_BAD_REQUEST, "Validation error.", DIRECTIVE_FORMAT);
+      }
+      String key = directive.substring(0, separator).trim();
+      String value = directive.substring(separator + 1).trim();
+      if (!StringUtils.hasLength(key) || !StringUtils.hasLength(value)) {
+        throw new AppException(HttpStatus.SC_BAD_REQUEST, "Validation error.", DIRECTIVE_FORMAT);
+      }
+      properties.put(key.toLowerCase(), value);
+    }
+    return properties;
   }
 
   private List<Record> getValidRecords(CopyRecordReferencesModel request,
@@ -91,7 +129,7 @@ public class CopyRecordReferencesServiceImpl implements CopyRecordReferencesServ
     if (StringUtils.hasLength(recordReferences.getTarget())) {
       String collaborationDirectives = String.format("id=%s,application=pws",
           recordReferences.getTarget());
-      return collaborationContextFactory.create(collaborationDirectives);
+      return CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
     } else {
       return Optional.empty();
     }
@@ -100,7 +138,7 @@ public class CopyRecordReferencesServiceImpl implements CopyRecordReferencesServ
   private Optional<CollaborationContext> getCollaborationContext(
       Map<String, String> collaborationHeader, String collaborationDirectives) {
     if (collaborationHeader.containsKey(ID)) {
-      return collaborationContextFactory.create(collaborationDirectives);
+      return CollaborationContextHelper.create(collaborationContextFactory, collaborationDirectives);
     } else {
       return Optional.empty();
     }
