@@ -72,7 +72,7 @@ public class SchemaApiTest {
 
         ResponseEntity response = this.sut.createSchema(schema);
 
-        assertEquals(HttpStatus.SC_CREATED, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_CREATED, response.getStatusCode().value());
     }
 
     @Test
@@ -103,7 +103,7 @@ public class SchemaApiTest {
 
         Schema schemaResponse = (Schema) response.getBody();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertEquals(KIND, schemaResponse.getKind());
     }
 
@@ -125,7 +125,7 @@ public class SchemaApiTest {
 
         ResponseEntity response = this.sut.deleteSchema(KIND);
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test

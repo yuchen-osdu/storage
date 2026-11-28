@@ -57,7 +57,9 @@ public class PartitionPolicyStatusService {
             this.logger.error(String.format("Error getting policy status for dataPartitionId: %s", dataPartitionId), e);
         }
 
-        this.cache.put(cacheKey, policyStatus);
+        if (this.cache != null) {
+            this.cache.put(cacheKey, policyStatus);
+        }
 
         return policyStatus.isEnabled();
     }

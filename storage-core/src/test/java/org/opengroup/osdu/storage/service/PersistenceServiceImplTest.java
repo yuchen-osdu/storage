@@ -24,7 +24,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.opengroup.osdu.core.common.feature.IFeatureFlag;
 import org.opengroup.osdu.core.common.logging.JaxRsDpsLog;
 import org.opengroup.osdu.core.common.model.entitlements.Acl;
 import org.opengroup.osdu.core.common.model.http.AppException;
@@ -50,7 +49,6 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
 
 @ExtendWith(MockitoExtension.class)
 public class PersistenceServiceImplTest {
@@ -78,8 +76,6 @@ public class PersistenceServiceImplTest {
     @Mock
     private JaxRsDpsLog logger;
 
-    @Mock
-    private IFeatureFlag collaborationFeatureFlag;
 
     @InjectMocks
     private PersistenceServiceImpl sut;
@@ -104,8 +100,6 @@ public class PersistenceServiceImplTest {
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void should_persistRecords_when_noExceptionIsThrown() {
-
-        when(collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)).thenReturn(false);
 
         this.setupRecordRepository(25, 23, 25);
 
@@ -139,9 +133,7 @@ public class PersistenceServiceImplTest {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public void should_persistRecords_when_noExceptionIsThrown_when_collaborationIsEmptyAndFFIsEnabled() {
-
-        when(collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
+    public void should_publish_v1_when_collaboration_is_empty() {
 
         this.setupRecordRepository(25, 23, 25);
 
@@ -166,20 +158,17 @@ public class PersistenceServiceImplTest {
         assertEquals(48, list1.size());
 
         ArgumentCaptor<PubSubInfo[]> pubsubCaptor = ArgumentCaptor.forClass(PubSubInfo[].class);
-        ArgumentCaptor<RecordChangedV2[]> recordChangedV2Captor = ArgumentCaptor.forClass(RecordChangedV2[].class);
 
-        verify(this.pubSubClient).publishMessage(eq(Optional.empty()), eq(this.headers), recordChangedV2Captor.capture());
-        verify(this.pubSubClient, never()).publishMessage(eq(this.headers), any(PubSubInfo[].class));
+        verify(this.pubSubClient).publishMessage(eq(this.headers), pubsubCaptor.capture());
 
-        this.assertRecordChangedV2Info(48, recordChangedV2Captor.getAllValues());
+        verify(this.pubSubClient, never()).publishMessage(any(Optional.class), eq(this.headers), any(RecordChangedV2[].class));
+
         verify(this.cloudStorage, times(0)).delete(any(RecordMetadata.class));
     }
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void should_persistRecords_when_noExceptionIsThrown_when_collaborationIsPresentAndFFIsEnabled() {
-
-        when(collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)).thenReturn(true);
 
         this.setupRecordRepository(25, 23, 25);
 
@@ -429,7 +418,92 @@ public class PersistenceServiceImplTest {
         assertTrue(patchErrors.isEmpty());
     }
 
-        @Test
+    @Test
+    public void should_publishSingleV1Update_after_metadataIsPersisted() {
+        RecordMetadata metadata = this.createListOfRecordMetadata().get(0);
+        ArgumentCaptor<PubSubInfo[]> events = ArgumentCaptor.forClass(PubSubInfo[].class);
+
+        this.sut.updateMetadataAndPublishRecordChangeEvent(metadata, Optional.empty());
+
+        var order = inOrder(this.recordRepository, this.pubSubClient);
+        order.verify(this.recordRepository).createOrUpdate(Collections.singletonList(metadata), Optional.empty());
+        order.verify(this.pubSubClient).publishMessage(eq(this.headers), events.capture());
+        assertEquals(1, events.getValue().length);
+        PubSubInfo event = events.getValue()[0];
+        assertEquals(metadata.getId(), event.getId());
+        assertEquals(metadata.getKind(), event.getKind());
+        assertEquals(OperationType.update, event.getOp());
+        verifyNoMoreInteractions(this.pubSubClient);
+    }
+
+    @Test
+    public void should_publishSingleV2Update_after_collaborationMetadataIsPersisted() {
+        RecordMetadata metadata = this.createListOfRecordMetadata().get(0);
+        ArgumentCaptor<RecordChangedV2[]> events = ArgumentCaptor.forClass(RecordChangedV2[].class);
+
+        this.sut.updateMetadataAndPublishRecordChangeEvent(metadata, COLLABORATION_CONTEXT);
+
+        var order = inOrder(this.recordRepository, this.pubSubClient);
+        order.verify(this.recordRepository).createOrUpdate(Collections.singletonList(metadata), COLLABORATION_CONTEXT);
+        order.verify(this.pubSubClient).publishMessage(eq(COLLABORATION_CONTEXT), eq(this.headers), events.capture());
+        assertEquals(1, events.getValue().length);
+        RecordChangedV2 event = events.getValue()[0];
+        assertEquals(metadata.getId(), event.getId());
+        assertEquals(metadata.getKind(), event.getKind());
+        assertEquals(metadata.getLatestVersion(), event.getVersion());
+        assertEquals(metadata.getModifyUser(), event.getModifiedBy());
+        assertEquals(OperationType.update, event.getOp());
+        verifyNoMoreInteractions(this.pubSubClient);
+    }
+
+    @Test
+    public void should_notPublishUpdate_when_metadataPersistenceFails() {
+        RecordMetadata metadata = this.createListOfRecordMetadata().get(0);
+        AppException failure = new AppException(500, "Persistence failed", "Cannot write metadata");
+        when(this.recordRepository.createOrUpdate(anyList(), eq(Optional.empty()))).thenThrow(failure);
+
+        AppException actual = assertThrows(AppException.class,
+                () -> this.sut.updateMetadataAndPublishRecordChangeEvent(metadata, Optional.empty()));
+
+        assertSame(failure, actual);
+        verifyNoInteractions(this.pubSubClient);
+    }
+
+    @Test
+    public void should_rejectMissingMetadata_when_publishingRecordChangeEvent() {
+        assertThrows(IllegalArgumentException.class,
+                () -> this.sut.updateMetadataAndPublishRecordChangeEvent(null, Optional.empty()));
+        verifyNoInteractions(this.recordRepository, this.pubSubClient);
+    }
+
+    @Test
+    public void should_rejectMissingPatchMap() {
+        assertThrows(IllegalArgumentException.class,
+                () -> this.sut.patchRecordsMetadata(null, Optional.empty()));
+        verifyNoInteractions(this.recordRepository, this.pubSubClient);
+    }
+
+    @Test
+    public void should_rejectPatchEntriesWithoutRecordOrPatch() {
+        Map<RecordMetadata, JsonPatch> patches = new HashMap<>();
+        patches.put(null, mock(JsonPatch.class));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> this.sut.patchRecordsMetadata(patches, Optional.empty()));
+        verifyNoInteractions(this.recordRepository, this.pubSubClient);
+    }
+
+    @Test
+    public void should_rejectNullPatchRepositoryResult() {
+        Map<RecordMetadata, JsonPatch> patches = new HashMap<>();
+        patches.put(new RecordMetadata(), mock(JsonPatch.class));
+        when(this.recordRepository.patch(anyMap(), any())).thenReturn(null);
+
+        assertThrows(IllegalStateException.class,
+                () -> this.sut.patchRecordsMetadata(patches, Optional.empty()));
+    }
+
+    @Test
     public void should_deleteOrphanedMetadata_when_cleanupDatastoreWithNoRemainingVersions() {
         List<RecordMetadata> recordsMetadata = new ArrayList<>();
 

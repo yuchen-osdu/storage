@@ -30,7 +30,8 @@ public class VersionIdsValidator implements ConstraintValidator<ValidVersionIds,
     }
 
     public static void validateForLatestVersion(String versionIds, Long latestVersion) {
-        if (versionIds.contains(String.valueOf(latestVersion))) {
+        List<String> versionIdList = Arrays.stream(versionIds.split(",")).toList();
+        if (versionIdList.contains(String.valueOf(latestVersion))) {
             throw RequestValidationException.builder()
                     .message(String.format(INVALID_VERSION_IDS_FOR_LATEST_VERSION, latestVersion))
                     .build();
@@ -70,7 +71,7 @@ public class VersionIdsValidator implements ConstraintValidator<ValidVersionIds,
      * @param versionId the given version id
      * @return true if the version path has the given version id, false otherwise
      */
-    private static boolean versionPathHasVersionId(String versionPath, String versionId) {
+    public static boolean versionPathHasVersionId(String versionPath, String versionId) {
         String[] versionPathParts = versionPath.split("/");
 
         // A valid version path must have exactly 3 parts: <kind>/<record-id>/<version-id>

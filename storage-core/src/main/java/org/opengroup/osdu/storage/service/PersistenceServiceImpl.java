@@ -14,7 +14,6 @@
 
 package org.opengroup.osdu.storage.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.fge.jsonpatch.JsonPatch;
 import com.google.common.base.Strings;
 
@@ -44,8 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
-
 @Service
 public class PersistenceServiceImpl implements PersistenceService {
 
@@ -63,10 +60,6 @@ public class PersistenceServiceImpl implements PersistenceService {
 
     @Autowired
     private JaxRsDpsLog logger;
-    @Autowired
-    private IFeatureFlag collaborationFeatureFlag;
-
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public void persistRecordBatch(TransferBatch transfer, Optional<CollaborationContext> collaborationContext) {
@@ -98,9 +91,9 @@ public class PersistenceServiceImpl implements PersistenceService {
         }
 
         this.commitBatch(recordsProcessing, recordsMetadata, collaborationContext);
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2);
-        } else if (!collaborationContext.isPresent()) {
+        } else  {
             this.pubSubClient.publishMessage(this.headers, pubsubInfo);
         }
     }
@@ -157,9 +150,9 @@ public class PersistenceServiceImpl implements PersistenceService {
             pubsubInfo[i] = getPubSubInfo(metadata, OperationType.update);
             recordChangedV2[i] = getRecordChangedV2(metadata, OperationType.update);
         }
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+        if (collaborationContext.isPresent()) {
             this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2);
-        } else if (!collaborationContext.isPresent()) {
+        } else {
             this.pubSubClient.publishMessage(this.headers, pubsubInfo);
         }
 
@@ -168,6 +161,14 @@ public class PersistenceServiceImpl implements PersistenceService {
 
     @Override
     public Map<String, String> patchRecordsMetadata(Map<RecordMetadata, JsonPatch> jsonPatchPerRecord, Optional<CollaborationContext> collaborationContext) {
+        if (jsonPatchPerRecord == null) {
+            throw new IllegalArgumentException("Record metadata patches are required.");
+        }
+        if (jsonPatchPerRecord.entrySet().stream()
+                .anyMatch(entry -> entry.getKey() == null || entry.getValue() == null)) {
+            throw new IllegalArgumentException("Each record metadata patch must include a record and patch.");
+        }
+
         Map<String, String> recordError;
         try {
             recordError = this.commitPatchDatastoreTransaction(jsonPatchPerRecord, collaborationContext);
@@ -184,6 +185,9 @@ public class PersistenceServiceImpl implements PersistenceService {
                 e.addSuppressed(innerEx);
             }
             throw e;
+        }
+        if (recordError == null) {
+            throw new IllegalStateException("Record metadata patch returned no result.");
         }
         if (!recordError.isEmpty()) {
             this.logger.warning("Reverting meta data changes");
@@ -212,9 +216,9 @@ public class PersistenceServiceImpl implements PersistenceService {
                 pubSubInfos.add(pubSubInfo);
                 recordChangedV2s.add(recordChangedV2);
             }
-            if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
+            if (collaborationContext.isPresent()) {
                 this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2s.stream().toArray(RecordChangedV2[]::new));
-            } else if (!collaborationContext.isPresent()) {
+            } else {
                 this.pubSubClient.publishMessage(this.headers, pubSubInfos.stream().toArray(PubSubInfo[]::new));
             }
         }
@@ -223,21 +227,18 @@ public class PersistenceServiceImpl implements PersistenceService {
 
     @Override
     public void updateMetadataAndPublishRecordChangeEvent(RecordMetadata recordMetadata, Optional<CollaborationContext> collaborationContext) {
-        List<RecordMetadata> recordMetadataList = Collections.singletonList(recordMetadata);
-        commitDatastoreTransaction(recordMetadataList, collaborationContext);
-
-        // publish event
-        PubSubInfo[] pubsubInfo = new PubSubInfo[recordMetadataList.size()];
-        RecordChangedV2[] recordChangedV2 = new RecordChangedV2[recordMetadataList.size()];
-        for (int i = 0; i < recordMetadataList.size(); i++) {
-            RecordMetadata metadata = recordMetadataList.get(i);
-            pubsubInfo[i] = getPubSubInfo(metadata, OperationType.update);
-            recordChangedV2[i] = getRecordChangedV2(metadata, OperationType.update);
+        if (recordMetadata == null) {
+            throw new IllegalArgumentException("Record metadata is required.");
         }
-        if (collaborationFeatureFlag.isFeatureEnabled(COLLABORATIONS_FEATURE_NAME)) {
-            this.pubSubClient.publishMessage(collaborationContext, this.headers, recordChangedV2);
-        } else if (collaborationContext.isEmpty()) {
-            this.pubSubClient.publishMessage(this.headers, pubsubInfo);
+
+        commitDatastoreTransaction(Collections.singletonList(recordMetadata), collaborationContext);
+
+        if (collaborationContext.isPresent()) {
+            this.pubSubClient.publishMessage(collaborationContext, this.headers,
+                    getRecordChangedV2(recordMetadata, OperationType.update));
+        } else {
+            this.pubSubClient.publishMessage(this.headers,
+                    getPubSubInfo(recordMetadata, OperationType.update));
         }
 
     }

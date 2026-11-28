@@ -22,7 +22,6 @@ public abstract class GetQueryInfoIntegrationTest extends TestBase {
   private static final String EXPOSE_FEATUREFLAG_ENABLED_PROPERTY = "expose_featureflag.enabled";
 
   private static final List<String> expectedFeatureFlags = List.of(
-      "collaborations-enabled",
       "featureFlag.opa.enabled"
   );
 

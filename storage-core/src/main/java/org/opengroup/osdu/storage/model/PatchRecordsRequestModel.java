@@ -23,7 +23,10 @@ import lombok.NoArgsConstructor;
 import org.opengroup.osdu.core.common.model.storage.SwaggerDoc;
 import org.opengroup.osdu.core.common.model.storage.validation.ValidationDoc;
 import org.opengroup.osdu.storage.validation.api.ValidBulkQueryPatch;
+import org.opengroup.osdu.storage.util.JsonPatchJacksonBridge;
 import org.opengroup.osdu.storage.validation.api.ValidJsonPatch;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -56,5 +59,7 @@ public class PatchRecordsRequestModel {
     @Schema(description = PATCH_RECORD_OPERATIONS, implementation = JsonPatch.class, requiredMode = Schema.RequiredMode.REQUIRED)
     @NotNull(message = org.opengroup.osdu.storage.validation.ValidationDoc.PATCH_RECORD_OPERATIONS_NOT_EMPTY)
     @ValidJsonPatch
+    @JsonDeserialize(using = JsonPatchJacksonBridge.Deserializer.class)
+    @JsonSerialize(using = JsonPatchJacksonBridge.Serializer.class)
     private JsonPatch ops;
 }

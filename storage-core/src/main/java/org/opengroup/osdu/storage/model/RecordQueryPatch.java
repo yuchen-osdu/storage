@@ -31,6 +31,7 @@ import static org.opengroup.osdu.core.common.model.storage.SwaggerDoc.FETCH_RECO
 @NoArgsConstructor
 @Schema(description = "Represents a model for Record Query Patch", example = "{ \"ids\": [\"common:work-product-component--wellLog:123456\"] }")
 public class RecordQueryPatch {
-    @ArraySchema(arraySchema = @Schema(implementation = String.class, requiredMode = Schema.RequiredMode.REQUIRED, description = FETCH_RECORD_ID_LIST))
+    @ArraySchema(minItems = 1, arraySchema = @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = FETCH_RECORD_ID_LIST),
+            schema = @Schema(implementation = String.class, minLength = 1))
     private List<String> ids;
 }

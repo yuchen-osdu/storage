@@ -26,6 +26,6 @@ public final class GetQueryInfoIntegrationTest extends BaseGetInfoAcceptanceTest
 
   public GetQueryInfoIntegrationTest() {
     super(UserType.PRIVILEGED_USER, ServiceType.STORAGE_V2,
-        List.of("collaborations-enabled", "featureFlag.opa.enabled"));
+        List.of("featureFlag.opa.enabled"));
   }
 }

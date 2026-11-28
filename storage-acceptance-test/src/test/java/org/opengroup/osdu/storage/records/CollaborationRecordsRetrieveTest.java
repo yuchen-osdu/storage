@@ -43,7 +43,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   private static final String APPLICATION_NAME = "storage service integration test";
 
-  private boolean isCollaborationEnabled;
   private String collaboration1Id;
   private String collaboration2Id;
   private String recordId1;
@@ -65,11 +64,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
   @Override
   public void setup() throws Exception {
     super.setup();
-    if (!configUtils.getIsCollaborationEnabled()) {
-      isCollaborationEnabled = false;
-      return;
-    }
-    isCollaborationEnabled = true;
     long now = System.currentTimeMillis();
     collaboration1Id = UUID.randomUUID().toString();
     collaboration2Id = UUID.randomUUID().toString();
@@ -104,9 +98,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @AfterEach
   void cleanupCollaborationRecords() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     storageClient.deleteRecord(recordId1, collaborationHeaders(null, APPLICATION_NAME));
     storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration1Id, APPLICATION_NAME));
     storageClient.deleteRecord(recordId1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
@@ -118,9 +109,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_getLatestVersion_when_validRecordIdAndCollaborationIdAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     HttpResponse<StorageRecord> response = storageClient.getRecord(recordId1, collaborationHeaders(null, APPLICATION_NAME));
     assertRecordVersion(response, record1V1);
 
@@ -138,9 +126,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_getCorrectRecordVersion_when_validRecordIdAndCollaborationIdAndRecordVersionAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     HttpResponse<StorageRecord> response = storageClient.getRecordVersion(recordId1,
         String.valueOf(record1V2),
         collaborationHeaders(collaboration1Id, APPLICATION_NAME));
@@ -154,9 +139,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_getAllRecordVersions_when_validRecordIdAndCollaborationIdAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var versionsHttpResponse = storageClient.getRecordVersions(recordId1,
         collaborationHeaders(null, APPLICATION_NAME));
     assertEquals(HttpStatus.SC_OK, versionsHttpResponse.statusCode());
@@ -176,9 +158,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_getRecordsOnlyInCollaborationContext_whenQueryByKind() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var response = storageClient.queryRecordsGet("?kind=" + kind1, collaborationHeaders(collaboration2Id, APPLICATION_NAME));
     assertEquals(SC_OK, response.statusCode());
     QueryResult responseObject = response.body();
@@ -200,9 +179,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_getEmptyRecordsInNoCollaborationContext_whenQueryByKind() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var response = storageClient.queryRecordsGet("?kind=" + kind2, collaborationHeaders(null, null));
     assertEquals(SC_OK, response.statusCode());
     QueryResult responseObject = response.body();
@@ -211,9 +187,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_fetchCorrectRecords_when_validRecordIdsAndCollaborationIdAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var fetchResponse = storageClient.queryRecordsBatchPost(QueryRecordsRequest.of(recordId1, recordId2, recordId3),
         collaborationHeaders(collaboration1Id, APPLICATION_NAME));
     assertEquals(HttpStatus.SC_OK, fetchResponse.statusCode());
@@ -258,9 +231,6 @@ public final class CollaborationRecordsRetrieveTest extends BaseRecordsAcceptanc
 
   @Test
   public void should_queryAllRecords_when_validRecordIdsAndCollaborationIdAreProvided() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     var queryResponse = storageClient.queryRecordsPost(QueryRecordsRequest.of(recordId1, recordId2, recordId3),
         collaborationHeaders(collaboration2Id, APPLICATION_NAME));
     assertEquals(HttpStatus.SC_OK, queryResponse.statusCode());

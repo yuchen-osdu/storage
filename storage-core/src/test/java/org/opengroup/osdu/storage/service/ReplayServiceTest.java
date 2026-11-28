@@ -430,4 +430,25 @@ public class ReplayServiceTest {
                 ReplayState.FAILED.name().equals(metadata.getState())));
         verify(auditLogger).createReplayRequestFail(anyList());
     }
+
+    @Test
+    public void test_processFailure_when_replayMetadataIsMissing() {
+        String replayId = UUID.randomUUID().toString();
+        String kind = "test:kind:1.0.0";
+        ReplayMessage replayMessage = ReplayMessage.builder()
+                .body(ReplayData.builder().replayId(replayId).kind(kind).build())
+                .build();
+        when(replayRepository.getReplayStatusByKindAndReplayId(kind, replayId)).thenReturn(null);
+
+        assertDoesNotThrow(() -> replayService.processFailure(replayMessage));
+
+        verify(replayRepository).getReplayStatusByKindAndReplayId(kind, replayId);
+        verify(replayRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    public void test_startReplay_rejectsMissingMetadata() {
+        assertThrows(IllegalArgumentException.class,
+                () -> ReflectionTestUtils.invokeMethod(replayService, "startReplay", new ArrayList<>(), null));
+    }
 }

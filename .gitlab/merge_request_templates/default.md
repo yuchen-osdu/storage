@@ -11,7 +11,6 @@
 - [ ] AWS 
 - [ ] Azure
 - [ ] GCP
-- [ ] IBM
 
 ## Does this introduce a breaking change?
 - [YES/NO]

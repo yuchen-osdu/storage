@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -74,6 +75,21 @@ class VersionIdsValidatorTest {
                 VersionIdsValidator.validateForLatestVersion(versionIds, latestVersion));
         assertEquals(expectedMessage, requestValidationException.getMessage());
 
+    }
+
+    @Test
+    void shouldNotThrowException_whenVersionIdsContainsSuffixOfLatestRecordVersion() {
+        String versionIds = "1100";
+        Long latestVersion = 100L;
+
+        assertDoesNotThrow(() -> VersionIdsValidator.validateForLatestVersion(versionIds, latestVersion));
+    }
+
+    @Test
+    void shouldValidate_versionPathHasVersionId_withExactMatchOnly() {
+        String versionPath = "kind1/recordID1/1100";
+        assertFalse(VersionIdsValidator.versionPathHasVersionId(versionPath, "100"));
+        assertTrue(VersionIdsValidator.versionPathHasVersionId(versionPath, "1100"));
     }
 
     @Test

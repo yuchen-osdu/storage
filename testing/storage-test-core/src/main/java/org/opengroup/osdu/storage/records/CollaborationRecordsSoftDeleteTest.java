@@ -40,9 +40,6 @@ public abstract class CollaborationRecordsSoftDeleteTest extends TestBase {
 
     @Override
     public void setup() throws Exception {
-        if (configUtils != null && !configUtils.getIsCollaborationEnabled()) {
-            return;
-        }
         isCollaborationEnabled = true;
         LEGAL_TAG_NAME = LegalTagUtils.createRandomName();
         LegalTagUtils.create(LEGAL_TAG_NAME, testUtils.getToken());

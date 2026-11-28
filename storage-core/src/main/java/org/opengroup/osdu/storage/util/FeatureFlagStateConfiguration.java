@@ -15,8 +15,6 @@
 
 package org.opengroup.osdu.storage.util;
 
-
-import static org.opengroup.osdu.storage.util.RecordConstants.COLLABORATIONS_FEATURE_NAME;
 import static org.opengroup.osdu.storage.util.RecordConstants.OPA_FEATURE_NAME;
 
 import lombok.RequiredArgsConstructor;
@@ -38,15 +36,6 @@ public class FeatureFlagStateConfiguration {
   private final ITenantInfoService tenantInfoService;
   private final IFeatureFlag featureFlagService;
 
-  @Bean
-  @RequestScope
-  public FeatureFlagStateResolver collaborationFFResolver() {
-    return CommonFeatureFlagStateResolverUtil.buildCommonFFStateResolver(
-        COLLABORATIONS_FEATURE_NAME,
-        tenantInfoService,
-        featureFlagService
-    );
-  }
   
   @Bean
   @RequestScope

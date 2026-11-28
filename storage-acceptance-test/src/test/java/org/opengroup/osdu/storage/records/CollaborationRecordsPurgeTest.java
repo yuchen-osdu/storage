@@ -39,7 +39,6 @@ public final class CollaborationRecordsPurgeTest extends BaseRecordsAcceptanceTe
 
   private static final String APPLICATION_NAME = "storage service integration test";
 
-  private boolean isCollaborationEnabled;
   private String recordPurgeId;
   private String collaboration2Id;
   private String kind1;
@@ -50,11 +49,6 @@ public final class CollaborationRecordsPurgeTest extends BaseRecordsAcceptanceTe
   @Override
   public void setup() throws Exception {
     super.setup();
-    if (!configUtils.getIsCollaborationEnabled()) {
-      isCollaborationEnabled = false;
-      return;
-    }
-    isCollaborationEnabled = true;
     long now = System.currentTimeMillis();
     recordPurgeId = getTenantId() + ":inttestpurge:1" + now;
     collaboration2Id = UUID.randomUUID().toString();
@@ -69,9 +63,6 @@ public final class CollaborationRecordsPurgeTest extends BaseRecordsAcceptanceTe
 
   @AfterEach
   void cleanupCollaborationRecords() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     deleteRecordIgnoringNotFound(recordPurgeId,
         collaborationHeaders(COLLABORATION1_ID, APPLICATION_NAME));
     deleteRecordIgnoringNotFound(recordPurgeId,
@@ -80,9 +71,6 @@ public final class CollaborationRecordsPurgeTest extends BaseRecordsAcceptanceTe
 
   @Test
   public void should_purgeAllRecordVersionsOnlyInCollaborationContext() {
-    if (!isCollaborationEnabled) {
-      return;
-    }
     HttpResponse<Void> deleteResponse = storageClient.deleteRecord(recordPurgeId,
         collaborationHeaders(COLLABORATION1_ID, APPLICATION_NAME));
     assertEquals(SC_NO_CONTENT, deleteResponse.statusCode());

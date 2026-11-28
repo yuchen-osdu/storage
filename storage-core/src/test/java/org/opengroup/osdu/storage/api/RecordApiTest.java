@@ -57,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.initMocks;
 
@@ -155,6 +156,19 @@ public class RecordApiTest {
     }
 
     @Test
+    public void should_defaultSkipDuplicatesToFalse_whenOptionalParameterIsNull() {
+        TransferInfo transfer = new TransferInfo();
+        List<Record> records = new ArrayList<>();
+        records.add(new Record());
+        when(this.ingestionService.createUpdateRecords(false, records, this.USER, Optional.empty())).thenReturn(transfer);
+        when(this.createUpdateRecordsResponseMapper.map(transfer, records)).thenReturn(new CreateUpdateRecordsResponse());
+
+        this.sut.createOrUpdateRecords(COLLABORATION_DIRECTIVES, null, records);
+
+        verify(this.ingestionService).createUpdateRecords(false, records, this.USER, Optional.empty());
+    }
+
+    @Test
     public void should_returnRecordIds_when_recordsAreNotUpdatedBecauseOfSkipDupes() {
         TransferInfo transfer = new TransferInfo();
         transfer.getSkippedRecords().add("id5");
@@ -188,7 +202,7 @@ public class RecordApiTest {
 
         RecordVersions versionsResponse = (RecordVersions) response.getBody();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertEquals(RECORD_ID, versionsResponse.getRecordId());
         assertTrue(versionsResponse.getVersions().contains(1L));
         assertTrue(versionsResponse.getVersions().contains(2L));
@@ -211,7 +225,7 @@ public class RecordApiTest {
 
         RecordVersions versionsResponse = (RecordVersions) response.getBody();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertEquals(RECORD_ID, versionsResponse.getRecordId());
         assertTrue(versionsResponse.getVersions().contains(1L));
         assertTrue(versionsResponse.getVersions().contains(2L));
@@ -221,7 +235,7 @@ public class RecordApiTest {
     public void should_returnHttp204_when_purgingRecordSuccessfully() {
         ResponseEntity response = this.sut.purgeRecord(COLLABORATION_DIRECTIVES, RECORD_ID);
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
@@ -230,7 +244,7 @@ public class RecordApiTest {
         when(this.collaborationContextFactory.create(eq(COLLABORATION_DIRECTIVES))).thenReturn(COLLABORATION_CONTEXT);
         ResponseEntity response = this.sut.purgeRecord(COLLABORATION_DIRECTIVES, RECORD_ID);
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
@@ -239,7 +253,7 @@ public class RecordApiTest {
         doNothing().when(recordService).purgeRecordVersions(RECORD_ID, DEFAULT_VERSION_IDS, LIMIT, FROM_VERSION, USER, Optional.empty());
         ResponseEntity response = this.sut.purgeRecordVersions(COLLABORATION_DIRECTIVES, RECORD_ID, DEFAULT_VERSION_IDS, LIMIT, FROM_VERSION);
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
@@ -248,7 +262,7 @@ public class RecordApiTest {
         doNothing().when(recordService).purgeRecordVersions(RECORD_ID, DEFAULT_VERSION_IDS, LIMIT, FROM_VERSION, USER, COLLABORATION_CONTEXT);
         ResponseEntity response = this.sut.purgeRecordVersions(COLLABORATION_DIRECTIVES, RECORD_ID, DEFAULT_VERSION_IDS, LIMIT, FROM_VERSION);
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
@@ -256,7 +270,7 @@ public class RecordApiTest {
         doNothing().when(recordService).deleteRecord(RECORD_ID, USER,COLLABORATION_CONTEXT);
         when(this.collaborationContextFactory.create(eq(COLLABORATION_DIRECTIVES))).thenReturn(COLLABORATION_CONTEXT);
         ResponseEntity response = this.sut.deleteRecord(COLLABORATION_DIRECTIVES, RECORD_ID);
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
@@ -267,7 +281,7 @@ public class RecordApiTest {
 
         String recordInfoResponse = response.getBody().toString();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertTrue(recordInfoResponse.contains(RECORD_ID));
     }
 
@@ -280,7 +294,7 @@ public class RecordApiTest {
 
         String recordInfoResponse = response.getBody().toString();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertTrue(recordInfoResponse.contains(RECORD_ID));
     }
 
@@ -296,7 +310,7 @@ public class RecordApiTest {
 
         String recordResponse = response.getBody().toString();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertTrue(recordResponse.contains(RECORD_ID));
         assertTrue(recordResponse.contains(Long.toString(VERSION)));
     }
@@ -314,7 +328,7 @@ public class RecordApiTest {
 
         String recordResponse = response.getBody().toString();
 
-        assertEquals(HttpStatus.SC_OK, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_OK, response.getStatusCode().value());
         assertTrue(recordResponse.contains(RECORD_ID));
         assertTrue(recordResponse.contains(Long.toString(VERSION)));
     }
@@ -328,27 +342,27 @@ public class RecordApiTest {
         when(this.collaborationContextFactory.create(eq(COLLABORATION_DIRECTIVES))).thenReturn(COLLABORATION_CONTEXT);
 
         ResponseEntity response = this.sut.bulkDeleteRecords(COLLABORATION_DIRECTIVES, recordIds);
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
     public void should_returnHttp204_when_deletingRecordSuccessfully() {
         ResponseEntity response = this.sut.deleteRecord(COLLABORATION_DIRECTIVES, RECORD_ID);
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
     public void should_returnHttp204_when_bulkDeleteRecordsSuccessfully() {
         ResponseEntity response = this.sut.bulkDeleteRecords(COLLABORATION_DIRECTIVES, singletonList(RECORD_ID));
 
-        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCodeValue());
+        assertEquals(HttpStatus.SC_NO_CONTENT, response.getStatusCode().value());
     }
 
     @Test
     public void should_allowAccessToCreateOrUpdateRecords_when_userBelongsToCreatorOrAdminGroups() throws Exception {
 
-        Method method = this.sut.getClass().getMethod("createOrUpdateRecords",  String.class ,boolean.class, List.class);
+        Method method = this.sut.getClass().getMethod("createOrUpdateRecords", String.class, Boolean.class, List.class);
         PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
 
         assertFalse(annotation.value().contains(StorageRole.VIEWER));

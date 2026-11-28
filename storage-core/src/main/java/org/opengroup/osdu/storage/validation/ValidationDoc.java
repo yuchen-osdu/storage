@@ -14,6 +14,9 @@
 
 package org.opengroup.osdu.storage.validation;
 
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
 public class ValidationDoc {
     public static final String PATCH_RECORD_OPERATIONS_NOT_EMPTY = "Record patch operations cannot be empty";
     public static final String INVALID_PATCH_PATH_START = "Invalid Patch Path: can only start with '/acl/viewers', 'acl/owners', '/legal/legaltags', '/tags', '/kind', '/ancestry/parents', '/data' or '/meta'";

@@ -210,4 +210,61 @@ public final class PurgeRecordsIntegrationTest extends BaseRecordsAcceptanceTest
     assertEquals("Invalid limit.", ex.getError().getReason());
     assertEquals(errorMessage, ex.getError().getMessage());
   }
+
+  @Test
+  public void shouldReturnHttp400BadRequest_whenPurgeRecordVersions_forVersionIdsSuffixOfExistingVersion() {
+    RecordVersions json = storageClient.getRecordVersions(RECORD_ID4).body();
+    String versionIdSuffix = versionSuffix(json.versions()[1]);
+    String queryParams = "?versionIds=" + versionIdSuffix;
+
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.purgeRecordVersions(RECORD_ID4, queryParams));
+    String errorMessage = String.format(
+        "Invalid Version Ids. The versionIds contains non existing version(s) '%s'",
+        versionIdSuffix);
+
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals(errorMessage, ex.getError().getMessage());
+    assertEquals(4, storageClient.getRecordVersions(RECORD_ID4).body().versions().length);
+  }
+
+  @Test
+  public void shouldReturnHttp400BadRequest_whenPurgeRecordVersions_forVersionIdsContainingLatestVersion() {
+    RecordVersions json = storageClient.getRecordVersions(RECORD_ID4).body();
+    Long latestVersion = json.versions()[json.versions().length - 1];
+    String queryParams = "?versionIds=" + json.versions()[0] + "," + latestVersion;
+
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.purgeRecordVersions(RECORD_ID4, queryParams));
+    String errorMessage = String.format(
+        "Invalid Version Ids. The versionIds contains latest record version '%d'",
+        latestVersion);
+
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals(errorMessage, ex.getError().getMessage());
+    assertEquals(4, storageClient.getRecordVersions(RECORD_ID4).body().versions().length);
+  }
+
+  @Test
+  public void shouldReturnHttp400BadRequest_whenPurgeRecordVersions_forFromVersionSuffixOfExistingVersion() {
+    RecordVersions json = storageClient.getRecordVersions(RECORD_ID4).body();
+    Long fromVersion = Long.parseLong(versionSuffix(json.versions()[1]));
+    String queryParams = "?from=" + fromVersion;
+
+    ClientException ex = assertThrows(ClientException.class,
+        () -> storageClient.purgeRecordVersions(RECORD_ID4, queryParams));
+    String errorMessage = String.format(
+        "Invalid 'from' version. The record version does not contains specified from version '%d'",
+        fromVersion);
+
+    assertEquals(HttpStatus.SC_BAD_REQUEST, ex.getStatusCode());
+    assertEquals("Invalid 'from' version.", ex.getError().getReason());
+    assertEquals(errorMessage, ex.getError().getMessage());
+    assertEquals(4, storageClient.getRecordVersions(RECORD_ID4).body().versions().length);
+  }
+
+  // A proper suffix of the given version id, without leading zeros, so it is not an existing version id.
+  private static String versionSuffix(Long version) {
+    return String.valueOf(Long.parseLong(version.toString().substring(1)));
+  }
 }
